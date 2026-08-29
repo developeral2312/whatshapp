@@ -24,13 +24,11 @@ const MEDIA_PORT = process.env.MEDIA_PORT || 3000;
 
 
 
-const MEDIA_BASE_URL =
-    process.env.MEDIA_BASE_URL ||
-    `http://localhost:${MEDIA_PORT}`;
+const MEDIA_BASE_URL = (process.env.MEDIA_BASE_URL || `http://localhost:${MEDIA_PORT}`)
+    .replace(/^"|"$/g, '')  // Remove quotes from start/end
+    .replace(/\/$/, '');    // Remove trailing slash
 
-
-
-
+console.log('🔗 MEDIA_BASE_URL:', MEDIA_BASE_URL);
     
 // ============================================================
 // WHATSAPP CLIENT FACTORY
