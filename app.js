@@ -1,1524 +1,519 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 
-    const qrcode = require('qrcode-terminal');
-    const path = require('path');
+const qrcode = require('qrcode-terminal');
+const path = require('path');
 
-    const pool = require('./db');
-    const QRCode = require('qrcode');  // Top par add karein
+// PostgreSQL temporarily disabled - Sirf ye line comment ki gayi hai
+// const pool = require('./db');
+const QRCode = require('qrcode');
 
+const googleSheets = require('./google-sheets');
 
-    const googleSheets = require('./google-sheets');
+const http = require('http');
 
-    const http = require('http');
+const moment = require('moment-timezone');
 
-    const moment = require('moment-timezone');
+require('dotenv').config();
 
-    require('dotenv').config();
-
-    const fs = require('fs');
-
-
-
-
-    const MEDIA_PORT = process.env.MEDIA_PORT || 3000;
-
-
-
-    const MEDIA_BASE_URL =
-
-        process.env.MEDIA_BASE_URL ||
-
-        `http://localhost:${MEDIA_PORT}`;
+const fs = require('fs');
 
 
 
 
-        
-    // ============================================================
+const MEDIA_PORT = process.env.MEDIA_PORT || 3000;
 
-    // WHATSAPP CLIENT FACTORY
 
-    // ============================================================
+
+const MEDIA_BASE_URL =
+    process.env.MEDIA_BASE_URL ||
+    `http://localhost:${MEDIA_PORT}`;
+
+
+
+
+    
+// ============================================================
+// WHATSAPP CLIENT FACTORY
+// ============================================================
 
    
-    function createWhatsAppClient() {
-
-
-
-        console.log('');
-
-        console.log('============================================================');
-
-        console.log('[CLIENT] Creating WhatsApp client...');
-
-        console.log('[CLIENT] Node version:', process.version);
-
-        console.log('[CLIENT] Platform:', process.platform);
-
-        console.log('[CLIENT] CWD:', process.cwd());
-
-        console.log('============================================================');
-
-
-
-        const newClient = new Client({
-
-
-
-            authStrategy: new LocalAuth({
-
-                clientId: 'company-archive',
-
-                dataPath: './.wwebjs_auth'
-                  
-            }),
-
-
-
-            puppeteer: {
-
-
-               executablePath: '/usr/bin/chromium',  // ✅ YE ADD KARO
-                headless: true,
-
-
-
-                args: [
-
-                    '--no-sandbox',
-
-                    '--disable-setuid-sandbox',
-
-                    '--disable-dev-shm-usage',
-
-                    '--disable-accelerated-2d-canvas',
-
-                    '--disable-gpu',
-
-                    '--disable-extensions',
-
-                    '--disable-background-networking',
-
-                    '--disable-background-timer-throttling',
-
-                    '--disable-backgrounding-occluded-windows',
-
-                    '--disable-breakpad',
-
-                    '--disable-component-extensions-with-background-pages',
-
-                    '--disable-features=Translate,BackForwardCache',
-
-                    '--disable-hang-monitor',
-
-                    '--disable-ipc-flooding-protection',
-
-                    '--disable-renderer-backgrounding',
-
-                    '--disable-sync',
-
-                    '--metrics-recording-only',
-
-                    '--no-first-run',
-
-                    '--no-default-browser-check',
-
-                    '--password-store=basic',
-
-                    '--use-mock-keychain',
-
-                    // --- ADD THESE FOR BETTER CONNECTION ---
-
-                    '--disable-web-security',
-
-                    '--disable-features=IsolateOrigins,site-per-process',
-
-                    '--window-size=1280,720'
-
-                ],
-
-
-
-                timeout: 120000,
-
-
-
-                protocolTimeout: 120000,
-
-                defaultViewport: null   // <--- ADD THIS
-
-            }
-
-        });
-
-
-
-        console.log('[CLIENT] Client object created successfully');
-
-
-
-        return newClient;
-
-    }
-
-
-
-    // ============================================================
-
-    // CLEAR WHATSAPP SESSION (IMPROVED)
-
-    // ============================================================
-
-
-
-    async function clearWhatsAppSession() {
-
-        try {
-
-            console.log('');
-
-            console.log('============================================================');
-
-            console.log('[SESSION] Starting session cleanup...');
-
-            console.log('============================================================');
-
-
-
-            const sessionPath = path.join(
-
-                process.cwd(),
-
-                '.wwebjs_auth',
-
-                'session-company-archive'
-
-            );
-
-
-
-            console.log('[SESSION] Checking session path:', sessionPath);
-
-
-
-            if (fs.existsSync(sessionPath)) {
-
-                console.log('[SESSION] Found session folder. Removing...');
-
-                await fs.promises.rm(sessionPath, {
-
-                    recursive: true,
-
-                    force: true
-
-                });
-
-                console.log('✅ WhatsApp session-company-archive removed');
-
-            } else {
-
-                console.log('ℹ️ Main session folder not found');
-
-            }
-
-
-
-            // --- Clean up any leftover files with company-archive in name ---
-
-            const authPath = path.join(process.cwd(), '.wwebjs_auth');
-
-            console.log('[SESSION] Checking auth path:', authPath);
-
-
-
-            if (fs.existsSync(authPath)) {
-
-                const files = await fs.promises.readdir(authPath);
-
-                console.log('[SESSION] Files in .wwebjs_auth:', files);
-
-
-
-                let removedCount = 0;
-
-                for (const file of files) {
-
-                    if (file.includes('company-archive')) {
-
-                        const filePath = path.join(authPath, file);
-
-                        console.log(`[SESSION] Removing leftover file: ${file}`);
-
-                        await fs.promises.rm(filePath, {
-
-                            recursive: true,
-
-                            force: true
-
-                        });
-
-                        removedCount++;
-
-                        console.log(`✅ Removed: ${file}`);
-
-                    }
-
-                }
-
-
-
-                if (removedCount === 0) {
-
-                    console.log('ℹ️ No leftover company-archive files found');
-
-                } else {
-
-                    console.log(`✅ Total ${removedCount} leftover files removed`);
-
-                }
-
-            } else {
-
-                console.log('ℹ️ Auth path not found');
-
-            }
-
-
-
-            console.log('============================================================');
-
-            console.log('[SESSION] Session cleanup completed');
-
-            console.log('============================================================');
-
-
-
-        } catch (error) {
-
-            console.error('❌ Failed to remove WhatsApp session:', error?.message || error);
-
-            console.error('Stack:', error?.stack);
-
-        }
-
-    }
-
-
-
-    let client = createWhatsAppClient();
-
-
-
-    let isRestartingWhatsApp = false;
-
-    let isForceRestarting = false;  // <--- NEW: For force restart
-
-
-    async function forceRestartWhatsAppClient() {
-
-        console.log('');
-
-        console.log('============================================================');
-
-        console.log('🔄 FORCE RESTART WHATSAPP CLIENT');
-
-        console.log('============================================================');
-
-
-
-        if (isForceRestarting) {
-
-            console.log('[FORCE RESTART] Already in progress. Skipping...');
-
-            return;
-
-        }
-
-
-
-        if (isRestartingWhatsApp) {
-
-            console.log('[FORCE RESTART] Normal restart in progress. Waiting...');
-
-            // Wait for normal restart to finish
-
-            let waitCount = 0;
-
-            while (isRestartingWhatsApp && waitCount < 30) {
-
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                waitCount++;
-
-            }
-
-            if (isRestartingWhatsApp) {
-
-                console.log('[FORCE RESTART] Normal restart still in progress. Force proceeding...');
-
-            }
-
-        }
-        isForceRestarting = true;
-
-        isRestartingWhatsApp = true;  // Lock both
-
-
-
-        try {
-
-            const oldClient = client;
-
-            if (oldClient && typeof oldClient.removeAllListeners === 'function') {
-
-                console.log('[FORCE RESTART] Removing old client event listeners...');
-
-                oldClient.removeAllListeners();
-
-                console.log('✅ Old client event listeners removed');
-
-            }
-
-
-            await clearWhatsAppSession();
-
-
-
-            // --- STEP 3: Destroy old client (force) ---
-
-            if (oldClient) {
-
+function createWhatsAppClient() {
+    console.log('');
+    console.log('============================================================');
+    console.log('[CLIENT] Creating WhatsApp client...');
+    console.log('[CLIENT] Node version:', process.version);
+    console.log('[CLIENT] Platform:', process.platform);
+    console.log('[CLIENT] CWD:', process.cwd());
+    console.log('============================================================');
+
+    // Dynamic Chromium path for different environments
+    let chromiumPath = null;
+    
+    if (process.platform === 'linux') {
+        // Render/Railway/Linux - try common paths
+        const linuxPaths = [
+            process.env.PUPPETEER_EXECUTABLE_PATH,  // Environment variable
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable'
+        ];
+        
+        for (const p of linuxPaths) {
+            if (p) {
                 try {
-
-                    console.log('[FORCE RESTART] Force destroying old client...');
-
-
-
-                    // Try to close browser directly
-
-                    if (oldClient.pupBrowser) {
-
-                        try {
-
-                            await oldClient.pupBrowser.close();
-
-                            console.log('✅ Browser closed directly');
-
-                        } catch (e) {
-
-                            console.log('⚠️ Browser close error:', e.message);
-
-                        }
-
+                    if (fs.existsSync(p)) {
+                        chromiumPath = p;
+                        console.log(`[CLIENT] Found Chromium at: ${p}`);
+                        break;
                     }
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+    } else if (process.platform === 'win32') {
+        // Windows - try Chrome paths
+        const windowsPaths = [
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`
+        ];
+        for (const p of windowsPaths) {
+            try {
+                if (fs.existsSync(p)) {
+                    chromiumPath = p;
+                    console.log(`[CLIENT] Found Chrome at: ${p}`);
+                    break;
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+    }
+
+    const puppeteerConfig = {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-breakpad',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-features=Translate,BackForwardCache',
+            '--disable-hang-monitor',
+            '--disable-ipc-flooding-protection',
+            '--disable-renderer-backgrounding',
+            '--disable-sync',
+            '--metrics-recording-only',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--password-store=basic',
+            '--use-mock-keychain',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--window-size=1280,720'
+        ],
+        timeout: 120000,
+        protocolTimeout: 120000,
+        defaultViewport: null
+    };
+
+    // Only set executablePath if found
+    if (chromiumPath) {
+        puppeteerConfig.executablePath = chromiumPath;
+        console.log(`[CLIENT] Using Chromium: ${chromiumPath}`);
+    } else {
+        console.log('[CLIENT] No Chromium found, letting Puppeteer use bundled');
+    }
+
+    const newClient = new Client({
+        authStrategy: new LocalAuth({
+            clientId: 'company-archive',
+            dataPath: './.wwebjs_auth'
+        }),
+        puppeteer: puppeteerConfig
+    });
+
+    console.log('[CLIENT] Client object created successfully');
+    return newClient;
+}
 
 
 
-                    // Try destroy
+// ============================================================
+// CLEAR WHATSAPP SESSION (IMPROVED)
+// ============================================================
+
+
+
+async function clearWhatsAppSession() {
+
+    try {
+
+        console.log('');
+        console.log('============================================================');
+        console.log('[SESSION] Starting session cleanup...');
+        console.log('============================================================');
+
+
+
+        const sessionPath = path.join(
+            process.cwd(),
+            '.wwebjs_auth',
+            'session-company-archive'
+        );
+
+
+
+        console.log('[SESSION] Checking session path:', sessionPath);
+
+
+
+        if (fs.existsSync(sessionPath)) {
+
+            console.log('[SESSION] Found session folder. Removing...');
+            await fs.promises.rm(sessionPath, {
+                recursive: true,
+                force: true
+            });
+            console.log('✅ WhatsApp session-company-archive removed');
+
+        } else {
+
+            console.log('ℹ️ Main session folder not found');
+
+        }
+
+
+
+        // --- Clean up any leftover files with company-archive in name ---
+
+        const authPath = path.join(process.cwd(), '.wwebjs_auth');
+        console.log('[SESSION] Checking auth path:', authPath);
+
+
+
+        if (fs.existsSync(authPath)) {
+
+            const files = await fs.promises.readdir(authPath);
+            console.log('[SESSION] Files in .wwebjs_auth:', files);
+
+
+
+            let removedCount = 0;
+
+            for (const file of files) {
+
+                if (file.includes('company-archive')) {
+
+                    const filePath = path.join(authPath, file);
+                    console.log(`[SESSION] Removing leftover file: ${file}`);
+                    await fs.promises.rm(filePath, {
+                        recursive: true,
+                        force: true
+                    });
+                    removedCount++;
+                    console.log(`✅ Removed: ${file}`);
+
+                }
+
+            }
+
+
+
+            if (removedCount === 0) {
+
+                console.log('ℹ️ No leftover company-archive files found');
+
+            } else {
+
+                console.log(`✅ Total ${removedCount} leftover files removed`);
+
+            }
+
+        } else {
+
+            console.log('ℹ️ Auth path not found');
+
+        }
+
+
+
+        console.log('============================================================');
+        console.log('[SESSION] Session cleanup completed');
+        console.log('============================================================');
+
+
+
+    } catch (error) {
+
+        console.error('❌ Failed to remove WhatsApp session:', error?.message || error);
+        console.error('Stack:', error?.stack);
+
+    }
+
+}
+
+
+
+let client = createWhatsAppClient();
+
+
+
+let isRestartingWhatsApp = false;
+let isForceRestarting = false;
+
+
+async function forceRestartWhatsAppClient() {
+
+    console.log('');
+    console.log('============================================================');
+    console.log('🔄 FORCE RESTART WHATSAPP CLIENT');
+    console.log('============================================================');
+
+
+
+    if (isForceRestarting) {
+
+        console.log('[FORCE RESTART] Already in progress. Skipping...');
+        return;
+
+    }
+
+
+
+    if (isRestartingWhatsApp) {
+
+        console.log('[FORCE RESTART] Normal restart in progress. Waiting...');
+        let waitCount = 0;
+        while (isRestartingWhatsApp && waitCount < 30) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            waitCount++;
+        }
+        if (isRestartingWhatsApp) {
+            console.log('[FORCE RESTART] Normal restart still in progress. Force proceeding...');
+        }
+
+    }
+    isForceRestarting = true;
+    isRestartingWhatsApp = true;
+
+
+
+    try {
+
+        const oldClient = client;
+
+        if (oldClient && typeof oldClient.removeAllListeners === 'function') {
+
+            console.log('[FORCE RESTART] Removing old client event listeners...');
+            oldClient.removeAllListeners();
+            console.log('✅ Old client event listeners removed');
+
+        }
+
+
+        await clearWhatsAppSession();
+
+
+
+        // --- STEP 3: Destroy old client (force) ---
+
+        if (oldClient) {
+
+            try {
+
+                console.log('[FORCE RESTART] Force destroying old client...');
+
+
+
+                // Try to close browser directly
+
+                if (oldClient.pupBrowser) {
 
                     try {
 
-                        await oldClient.destroy();
-
-                        console.log('✅ Old client destroyed');
+                        await oldClient.pupBrowser.close();
+                        console.log('✅ Browser closed directly');
 
                     } catch (e) {
 
-                        console.log('⚠️ Destroy error:', e.message);
+                        console.log('⚠️ Browser close error:', e.message);
 
                     }
 
+                }
 
 
-                } catch (error) {
 
-                    console.log('[FORCE RESTART] Old client cleanup warning:', error.message);
+                // Try destroy
+
+                try {
+
+                    await oldClient.destroy();
+                    console.log('✅ Old client destroyed');
+
+                } catch (e) {
+
+                    console.log('⚠️ Destroy error:', e.message);
 
                 }
 
-            }
 
 
+            } catch (error) {
 
-            // --- STEP 4: Wait ---
-
-            console.log('[FORCE RESTART] Waiting 2 seconds...');
-
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-
-
-            // --- STEP 5: Create NEW client ---
-
-            console.log('[FORCE RESTART] Creating new WhatsApp client...');
-
-            const newClient = createWhatsAppClient();
-
-
-
-            // --- STEP 6: Update global ---
-
-            client = newClient;
-
-
-
-            // --- STEP 7: Attach events ---
-
-            console.log('[FORCE RESTART] Attaching WhatsApp events...');
-
-            attachClientEvents(newClient);
-
-
-
-            // --- STEP 8: Initialize ---
-
-            console.log('[FORCE RESTART] Initializing new WhatsApp client...');
-
-            await newClient.initialize();
-
-
-
-            console.log('');
-
-            console.log('============================================================');
-
-            console.log('✅ FORCE RESTART COMPLETED');
-
-            console.log('📱 NEW QR SHOULD NOW APPEAR');
-
-            console.log('============================================================');
-
-
-
-        } catch (error) {
-
-            console.error('');
-
-            console.error('============================================================');
-
-            console.error('❌ FORCE RESTART FAILED');
-
-            console.error('Message:', error?.message);
-
-            console.error('Stack:', error?.stack);
-
-            console.error('============================================================');
-
-
-
-            // Try to recover by creating a new client
-
-            try {
-
-                console.log('[FORCE RESTART] Attempting recovery...');
-
-                const recoveryClient = createWhatsAppClient();
-
-                client = recoveryClient;
-
-                attachClientEvents(recoveryClient);
-
-                await recoveryClient.initialize();
-
-                console.log('✅ Recovery successful');
-
-            } catch (recoveryError) {
-
-                console.error('❌ Recovery failed:', recoveryError.message);
+                console.log('[FORCE RESTART] Old client cleanup warning:', error.message);
 
             }
-
-
-
-        } finally {
-
-            isForceRestarting = false;
-
-            isRestartingWhatsApp = false;
-
-            console.log('[FORCE RESTART] Process completed');
-
-        }
-
-    }
-
-
-
-    // ============================================================
-
-    // RESTART WHATSAPP CLIENT (NORMAL)
-
-    // ============================================================
-
-    async function restartWhatsAppClient() {
-
-
-
-        if (isRestartingWhatsApp) {
-
-
-
-            console.log(
-
-                '[RESTART] Restart already in progress. Skipping...'
-
-            );
-
-
-
-            return;
 
         }
 
 
 
-        isRestartingWhatsApp = true;
+        // --- STEP 4: Wait ---
+
+        console.log('[FORCE RESTART] Waiting 2 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+
+
+        // --- STEP 5: Create NEW client ---
+
+        console.log('[FORCE RESTART] Creating new WhatsApp client...');
+        const newClient = createWhatsAppClient();
+
+
+
+        // --- STEP 6: Update global ---
+
+        client = newClient;
+
+
+
+        // --- STEP 7: Attach events ---
+
+        console.log('[FORCE RESTART] Attaching WhatsApp events...');
+        attachClientEvents(newClient);
+
+
+
+        // --- STEP 8: Initialize ---
+
+        console.log('[FORCE RESTART] Initializing new WhatsApp client...');
+        await newClient.initialize();
 
 
 
         console.log('');
-
+        console.log('============================================================');
+        console.log('✅ FORCE RESTART COMPLETED');
+        console.log('📱 NEW QR SHOULD NOW APPEAR');
         console.log('============================================================');
 
-        console.log('🔄 RESTARTING WHATSAPP CLIENT');
-
-        console.log('============================================================');
 
 
+    } catch (error) {
+
+        console.error('');
+        console.error('============================================================');
+        console.error('❌ FORCE RESTART FAILED');
+        console.error('Message:', error?.message);
+        console.error('Stack:', error?.stack);
+        console.error('============================================================');
+
+
+
+        // Try to recover by creating a new client
 
         try {
 
-
-
-            // ----------------------------------------------------
-
-            // 1. Destroy current client
-
-            // ----------------------------------------------------
-
-
-
-            const oldClient = client;
-
-
-
-            if (oldClient) {
-
-
-
-                try {
-
-
-
-                    console.log(
-
-                        '[RESTART] Destroying old client...'
-
-                    );
-
-
-
-                    await oldClient.destroy();
-
-
-
-                    console.log(
-
-                        '[RESTART] Old client destroyed'
-
-                    );
-
-
-
-                } catch (error) {
-
-
-
-                    console.log(
-
-                        '[RESTART] Old client destroy warning:',
-
-                        error.message
-
-                    );
-
-                }
-
-            }
-
-
-
-            // ----------------------------------------------------
-
-            // 2. Remove old LocalAuth session
-
-            // ----------------------------------------------------
-
-
-
-            await clearWhatsAppSession();
-
-
-
-            // ----------------------------------------------------
-
-            // 3. Wait a little
-
-            // ----------------------------------------------------
-
-
-
-            console.log(
-
-                '[RESTART] Waiting before creating new client...'
-
-            );
-
-
-
-            await new Promise(resolve =>
-
-                setTimeout(resolve, 2000)
-
-            );
-
-
-
-            // ----------------------------------------------------
-
-            // 4. Create NEW client
-
-            // ----------------------------------------------------
-
-
-
-            console.log(
-
-                '[RESTART] Creating new WhatsApp client...'
-
-            );
-
-
-
-            const newClient =
-
-                createWhatsAppClient();
-
-
-
-            client = newClient;
-
-
-
-            // ----------------------------------------------------
-
-            // 5. Attach events BEFORE initialize
-
-            // ----------------------------------------------------
-
-
-
-            console.log(
-
-                '[RESTART] Attaching WhatsApp events...'
-
-            );
-
-
-
-            attachClientEvents(newClient);
-
-
-
-            // ----------------------------------------------------
-
-            // 6. Initialize NEW client
-
-            // ----------------------------------------------------
-
-
-
-            console.log(
-
-                '[RESTART] Initializing new WhatsApp client...'
-
-            );
-
-
-
-            await newClient.initialize();
-
-
-
-            console.log('');
-
-            console.log('============================================================');
-
-            console.log('✅ NEW WHATSAPP CLIENT INITIALIZED');
-
-            console.log('============================================================');
-
-
-
-        } catch (error) {
-
-
-
-            console.error('');
-
-            console.error('============================================================');
-
-            console.error('❌ WHATSAPP RESTART FAILED');
-
-            console.error('Message:', error.message);
-
-            console.error('============================================================');
-
-
-
-        } finally {
-
-
-
-            isRestartingWhatsApp = false;
+            console.log('[FORCE RESTART] Attempting recovery...');
+            const recoveryClient = createWhatsAppClient();
+            client = recoveryClient;
+            attachClientEvents(recoveryClient);
+            await recoveryClient.initialize();
+            console.log('✅ Recovery successful');
+
+        } catch (recoveryError) {
+
+            console.error('❌ Recovery failed:', recoveryError.message);
 
         }
+
+
+
+    } finally {
+
+        isForceRestarting = false;
+        isRestartingWhatsApp = false;
+        console.log('[FORCE RESTART] Process completed');
+
+    }
+
+}
+
+
+
+// ============================================================
+// RESTART WHATSAPP CLIENT (NORMAL)
+// ============================================================
+
+async function restartWhatsAppClient() {
+
+
+
+    if (isRestartingWhatsApp) {
+
+
+
+        console.log(
+            '[RESTART] Restart already in progress. Skipping...'
+        );
+
+
+
+        return;
 
     }
 
 
 
-    async function prepareDatabase() {
+    isRestartingWhatsApp = true;
 
 
 
-        try {
+    console.log('');
+    console.log('============================================================');
+    console.log('🔄 RESTARTING WHATSAPP CLIENT');
+    console.log('============================================================');
 
 
 
-            await pool.query(`
+    try {
 
-                ALTER TABLE messages
 
-                ADD COLUMN IF NOT EXISTS media_path TEXT
 
-            `);
+        // ----------------------------------------------------
 
+        // 1. Destroy current client
 
+        // ----------------------------------------------------
 
-            await pool.query(`
 
-                ALTER TABLE messages
 
-                ADD COLUMN IF NOT EXISTS sender_id TEXT
+        const oldClient = client;
 
-            `);
 
 
-
-            await pool.query(`
-
-                ALTER TABLE messages
-
-                ADD COLUMN IF NOT EXISTS sender_number TEXT
-
-            `);
-
-
-
-            await pool.query(`
-
-                ALTER TABLE messages
-
-                ADD COLUMN IF NOT EXISTS sender_name TEXT
-
-            `);
-
-
-
-            await pool.query(`
-
-                ALTER TABLE messages
-
-                ADD COLUMN IF NOT EXISTS media_data BYTEA
-
-            `);
-
-
-
-            await pool.query(`
-
-                ALTER TABLE messages
-
-                ADD COLUMN IF NOT EXISTS media_mimetype TEXT
-
-            `);
-
-
-
-            await pool.query(`
-
-                ALTER TABLE messages
-
-                ADD COLUMN IF NOT EXISTS media_filename TEXT
-
-            `);
-
-
-
-            await pool.query(`
-
-                ALTER TABLE messages
-
-                ADD COLUMN IF NOT EXISTS location_link TEXT
-
-            `);
-
-
-
-            console.log(
-
-                'Database structure ready'
-
-            );
-
-
-
-        } catch (error) {
-
-
-
-            console.error(
-
-                'Database preparation failed'
-
-            );
-
-
-
-            console.error(error);
-
-        }
-
-    }
-
-
-
-    // ============================================================
-
-    // WHATSAPP ID HELPERS
-
-    // ============================================================
-
-
-
-    function normalizeWhatsAppId(id) {
-
-
-
-        if (!id) {
-
-            return null;
-
-        }
-
-
-
-        if (typeof id === 'string') {
-
-            return id;
-
-        }
-
-
-
-        if (id._serialized) {
-
-            return id._serialized;
-
-        }
-
-
-
-        if (id.$1) {
-
-            return id.$1;
-
-        }
-
-
-
-        if (id.user && id.server) {
-
-            return `${id.user}@${id.server}`;
-
-        }
-
-
-
-        return null;
-
-    }
-
-
-
-    function getMessageSerializedId(msg) {
-
-
-
-        try {
-
-
-
-            if (!msg || !msg.id) {
-
-                return null;
-
-            }
-
-
-
-            const id = msg.id;
-
-
-
-            if (id._serialized) {
-
-                return id._serialized;
-
-            }
-
-
-
-            if (id.$1) {
-
-                return id.$1;
-
-            }
-
-
-
-            const fromMe =
-
-                typeof id.fromMe !== 'undefined'
-
-                    ? id.fromMe
-
-                    : msg.fromMe;
-
-
-
-            const remote =
-
-                id.remote ||
-
-                msg.from ||
-
-                null;
-
-
-
-            const messagePart =
-
-                id.id ||
-
-                null;
-
-
-
-            const participant =
-
-                id.participant ||
-
-                msg.author ||
-
-                null;
-
-
-
-            if (
-
-                typeof fromMe !== 'undefined' &&
-
-                remote &&
-
-                messagePart
-
-            ) {
-
-
-
-                let serialized =
-
-                    `${fromMe}_${remote}_${messagePart}`;
-
-
-
-                if (participant) {
-
-                    serialized += `_${participant}`;
-
-                }
-
-
-
-                return serialized;
-
-            }
-
-
-
-            return null;
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                '[MESSAGE ID] Failed:',
-
-                error.message
-
-            );
-
-
-
-            return null;
-
-        }
-
-    }
-
-
-
-    function extractPhoneFromId(id) {
-
-
-
-        if (!id) {
-
-            return null;
-
-        }
-
-
-
-        const normalizedId =
-
-            normalizeWhatsAppId(id);
-
-
-
-        if (!normalizedId) {
-
-            return null;
-
-        }
-
-
-
-        if (normalizedId.endsWith('@c.us')) {
-
-
-
-            return normalizedId.replace(
-
-                '@c.us',
-
-                ''
-
-            );
-
-        }
-
-
-
-        return null;
-
-    }
-
-
-
-    // ============================================================
-
-    // CONTACT HELPERS
-
-    // ============================================================
-
-
-
-    function getBestContactName(contact) {
-
-
-
-        if (!contact) {
-
-            return null;
-
-        }
-
-
-
-        const possibleNames = [
-
-
-
-            contact.pushname,
-
-            contact.name,
-
-            contact.shortName,
-
-            contact.verifiedName,
-
-            contact.formattedName
-
-
-
-        ];
-
-
-
-        for (const name of possibleNames) {
-
-
-
-            if (
-
-                typeof name === 'string' &&
-
-                name.trim().length > 0
-
-            ) {
-
-
-
-                return name.trim();
-
-            }
-
-        }
-
-
-
-        return null;
-
-    }
-
-
-
-    async function safeGetContact(contactId) {
-
-
-
-        try {
-
-
-
-            if (!contactId) {
-
-                return null;
-
-            }
-
-
-
-            const normalizedId =
-
-                normalizeWhatsAppId(contactId);
-
-
-
-            if (!normalizedId) {
-
-                return null;
-
-            }
-
-
-
-            console.log(
-
-                `[CONTACT] Looking up contact: ${normalizedId}`
-
-            );
-
-
-
-            const contact =
-
-                await client.getContactById(
-
-                    normalizedId
-
-                );
-
-
-
-            return contact || null;
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                `[CONTACT] getContactById failed for ${contactId}:`,
-
-                error.message
-
-            );
-
-
-
-            return null;
-
-        }
-
-    }
-
-
-
-    async function resolveLidToPhone(lid) {
-
-
-
-        try {
-
-
-
-            if (!lid) {
-
-                return null;
-
-            }
-
-
-
-            if (!lid.endsWith('@lid')) {
-
-                return extractPhoneFromId(lid);
-
-            }
-
-
-
-            console.log(
-
-                `[LID] Resolving LID: ${lid}`
-
-            );
-
-
-
-            if (
-
-                typeof client.getContactLidAndPhone !==
-
-                'function'
-
-            ) {
-
-
-
-                console.log(
-
-                    '[LID] getContactLidAndPhone() is not available'
-
-                );
-
-
-
-                return null;
-
-            }
-
-
-
-            const result =
-
-                await client.getContactLidAndPhone([
-
-                    lid
-
-                ]);
-
-
-
-            console.log(
-
-                '[LID] Resolution result:',
-
-                result
-
-            );
-
-
-
-            if (
-
-                Array.isArray(result) &&
-
-                result.length > 0 &&
-
-                result[0]
-
-            ) {
-
-
-
-                const phone =
-
-                    result[0].pn;
-
-
-
-                if (phone) {
-
-
-
-                    return phone.replace(
-
-                        '@c.us',
-
-                        ''
-
-                    );
-
-                }
-
-            }
-
-
-
-            return null;
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                '[LID] Failed to resolve LID:',
-
-                error.message
-
-            );
-
-
-
-            return null;
-
-        }
-
-    }
-
-
-
-    // ============================================================
-
-    // SENDER INFO
-
-    // ============================================================
-
-
-
-    async function getSenderInfo(msg) {
-
-
-
-        let senderId = null;
-
-        let senderNumber = null;
-
-        let senderName = null;
-
-
-
-        try {
-
-
-
-            senderId =
-
-                normalizeWhatsAppId(msg.author) ||
-
-                normalizeWhatsAppId(
-
-                    msg.id?.participant
-
-                ) ||
-
-                normalizeWhatsAppId(msg.from);
-
-
-
-            console.log(
-
-                '[SENDER] Initial sender ID:',
-
-                senderId
-
-            );
-
-
-
-            if (!senderId) {
-
-
-
-                console.log(
-
-                    '[SENDER] Sender ID unavailable'
-
-                );
-
-
-
-                return {
-
-
-
-                    senderId: null,
-
-                    senderNumber: null,
-
-                    senderName: 'Unknown Sender'
-
-
-
-                };
-
-            }
-
-
-
-            senderNumber =
-
-                extractPhoneFromId(senderId);
-
-
-
-            if (senderNumber) {
-
-
-
-                console.log(
-
-                    '[SENDER] Phone from ID:',
-
-                    senderNumber
-
-                );
-
-            }
+        if (oldClient) {
 
 
 
@@ -1527,74 +522,18 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 console.log(
-
-                    '[SENDER] Trying msg.getContact()...'
-
+                    '[RESTART] Destroying old client...'
                 );
 
 
 
-                const contact =
-
-                    await msg.getContact();
+                await oldClient.destroy();
 
 
 
-                if (contact) {
-
-
-
-                    console.log(
-
-                        '[SENDER] Contact found'
-
-                    );
-
-
-
-                    senderName =
-
-                        getBestContactName(contact);
-
-
-
-                    if (
-
-                        !senderNumber &&
-
-                        contact.id?.user
-
-                    ) {
-
-
-
-                        senderNumber =
-
-                            contact.id.user;
-
-                    }
-
-
-
-                    console.log(
-
-                        '[SENDER] Contact name:',
-
-                        senderName || 'Not available'
-
-                    );
-
-
-
-                    console.log(
-
-                        '[SENDER] Contact number:',
-
-                        senderNumber || 'Not available'
-
-                    );
-
-                }
+                console.log(
+                    '[RESTART] Old client destroyed'
+                );
 
 
 
@@ -1603,292 +542,391 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 console.log(
-
-                    '[SENDER] msg.getContact() failed:',
-
+                    '[RESTART] Old client destroy warning:',
                     error.message
-
                 );
 
             }
 
-
-
-            if (
-
-                senderId.endsWith('@lid') &&
-
-                !senderNumber
-
-            ) {
+        }
 
 
 
-                senderNumber =
+        // ----------------------------------------------------
 
-                    await resolveLidToPhone(
+        // 2. Remove old LocalAuth session
 
-                        senderId
-
-                    );
+        // ----------------------------------------------------
 
 
 
-                if (senderNumber) {
+        await clearWhatsAppSession();
 
 
 
-                    console.log(
+        // ----------------------------------------------------
 
-                        '[SENDER] LID resolved to phone:',
+        // 3. Wait a little
 
-                        senderNumber
+        // ----------------------------------------------------
 
-                    );
 
-                }
 
+        console.log(
+            '[RESTART] Waiting before creating new client...'
+        );
+
+
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 2000)
+        );
+
+
+
+        // ----------------------------------------------------
+
+        // 4. Create NEW client
+
+        // ----------------------------------------------------
+
+
+
+        console.log(
+            '[RESTART] Creating new WhatsApp client...'
+        );
+
+
+
+        const newClient =
+            createWhatsAppClient();
+
+
+
+        client = newClient;
+
+
+
+        // ----------------------------------------------------
+
+        // 5. Attach events BEFORE initialize
+
+        // ----------------------------------------------------
+
+
+
+        console.log(
+            '[RESTART] Attaching WhatsApp events...'
+        );
+
+
+
+        attachClientEvents(newClient);
+
+
+
+        // ----------------------------------------------------
+
+        // 6. Initialize NEW client
+
+        // ----------------------------------------------------
+
+
+
+        console.log(
+            '[RESTART] Initializing new WhatsApp client...'
+        );
+
+
+
+        await newClient.initialize();
+
+
+
+        console.log('');
+        console.log('============================================================');
+        console.log('✅ NEW WHATSAPP CLIENT INITIALIZED');
+        console.log('============================================================');
+
+
+
+    } catch (error) {
+
+
+
+        console.error('');
+        console.error('============================================================');
+        console.error('❌ WHATSAPP RESTART FAILED');
+        console.error('Message:', error.message);
+        console.error('============================================================');
+
+
+
+    } finally {
+
+
+
+        isRestartingWhatsApp = false;
+
+    }
+
+}
+
+
+
+// ============================================================
+// POSTGRESQL DISABLED - COMMENTED OUT
+// ============================================================
+
+/*
+async function prepareDatabase() {
+    try {
+        // PostgreSQL functions temporarily disabled
+        console.log('ℹ️ PostgreSQL is temporarily disabled');
+    } catch (error) {
+        console.error('Database preparation failed');
+        console.error(error);
+    }
+}
+*/
+
+
+
+// ============================================================
+// WHATSAPP ID HELPERS
+// ============================================================
+
+
+
+function normalizeWhatsAppId(id) {
+
+
+
+    if (!id) {
+        return null;
+    }
+
+
+
+    if (typeof id === 'string') {
+        return id;
+    }
+
+
+
+    if (id._serialized) {
+        return id._serialized;
+    }
+
+
+
+    if (id.$1) {
+        return id.$1;
+    }
+
+
+
+    if (id.user && id.server) {
+        return `${id.user}@${id.server}`;
+    }
+
+
+
+    return null;
+
+}
+
+
+
+function getMessageSerializedId(msg) {
+
+
+
+    try {
+
+
+
+        if (!msg || !msg.id) {
+            return null;
+        }
+
+
+
+        const id = msg.id;
+
+
+
+        if (id._serialized) {
+            return id._serialized;
+        }
+
+
+
+        if (id.$1) {
+            return id.$1;
+        }
+
+
+
+        const fromMe =
+            typeof id.fromMe !== 'undefined'
+                ? id.fromMe
+                : msg.fromMe;
+
+
+
+        const remote =
+            id.remote ||
+            msg.from ||
+            null;
+
+
+
+        const messagePart =
+            id.id ||
+            null;
+
+
+
+        const participant =
+            id.participant ||
+            msg.author ||
+            null;
+
+
+
+        if (
+            typeof fromMe !== 'undefined' &&
+            remote &&
+            messagePart
+        ) {
+
+
+
+            let serialized =
+                `${fromMe}_${remote}_${messagePart}`;
+
+
+
+            if (participant) {
+                serialized += `_${participant}`;
             }
 
 
 
-            if (
+            return serialized;
 
-                senderNumber &&
+        }
 
-                !senderName
 
-            ) {
 
+        return null;
 
 
-                const phoneId =
 
-                    `${senderNumber}@c.us`;
+    } catch (error) {
 
 
 
-                console.log(
+        console.log(
+            '[MESSAGE ID] Failed:',
+            error.message
+        );
 
-                    '[SENDER] Trying phone contact:',
 
-                    phoneId
 
-                );
+        return null;
 
+    }
 
+}
 
-                const phoneContact =
 
-                    await safeGetContact(
 
-                        phoneId
+function extractPhoneFromId(id) {
 
-                    );
 
 
+    if (!id) {
+        return null;
+    }
 
-                if (phoneContact) {
 
 
+    const normalizedId =
+        normalizeWhatsAppId(id);
 
-                    senderName =
 
-                        getBestContactName(
 
-                            phoneContact
+    if (!normalizedId) {
+        return null;
+    }
 
-                        );
 
 
+    if (normalizedId.endsWith('@c.us')) {
 
-                    console.log(
 
-                        '[SENDER] Phone contact name:',
 
-                        senderName || 'Not available'
+        return normalizedId.replace(
+            '@c.us',
+            ''
+        );
 
-                    );
+    }
 
-                }
 
-            }
 
+    return null;
 
+}
 
-            if (!senderName) {
 
 
+// ============================================================
+// CONTACT HELPERS
+// ============================================================
 
-                const originalContact =
 
-                    await safeGetContact(
 
-                        senderId
+function getBestContactName(contact) {
 
-                    );
 
 
+    if (!contact) {
+        return null;
+    }
 
-                if (originalContact) {
 
 
+    const possibleNames = [
 
-                    senderName =
 
-                        getBestContactName(
 
-                            originalContact
+        contact.pushname,
+        contact.name,
+        contact.shortName,
+        contact.verifiedName,
+        contact.formattedName
 
-                        );
 
-                }
 
-            }
+    ];
 
 
 
-            if (!senderName) {
+    for (const name of possibleNames) {
 
 
 
-                if (senderNumber) {
+        if (
+            typeof name === 'string' &&
+            name.trim().length > 0
+        ) {
 
-                    senderName = senderNumber;
 
-                } else {
 
-                    senderName = senderId;
-
-                }
-
-            }
-
-
-
-            console.log('');
-
-            console.log(
-
-                '========== SENDER INFO =========='
-
-            );
-
-
-
-            console.log(
-
-                'Sender ID:',
-
-                senderId
-
-            );
-
-
-
-            console.log(
-
-                'Sender Number:',
-
-                senderNumber
-
-            );
-
-
-
-            console.log(
-
-                'Sender Name:',
-
-                senderName
-
-            );
-
-
-
-            console.log(
-
-                '================================='
-
-            );
-
-
-
-            console.log('');
-
-
-
-            return {
-
-
-
-                senderId,
-
-                senderNumber,
-
-                senderName
-
-
-
-            };
-
-
-
-        } catch (error) {
-
-
-
-            console.error(
-
-                '[SENDER] Unexpected sender lookup error:',
-
-                error.message
-
-            );
-
-
-
-            return {
-
-
-
-                senderId:
-
-                    senderId ||
-
-                    normalizeWhatsAppId(
-
-                        msg.author
-
-                    ) ||
-
-                    normalizeWhatsAppId(
-
-                        msg.from
-
-                    ),
-
-
-
-                senderNumber:
-
-                    senderNumber || null,
-
-
-
-                senderName:
-
-                    senderName ||
-
-                    senderNumber ||
-
-                    senderId ||
-
-                    'Unknown Sender'
-
-
-
-            };
+            return name.trim();
 
         }
 
@@ -1896,50 +934,225 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-    // ============================================================
+    return null;
 
-    // GROUP INFO
-
-    // ============================================================
+}
 
 
 
-    async function getGroupInfo(msg, groupWhatsappId) {
+async function safeGetContact(contactId) {
 
 
 
-        let groupName = null;
+    try {
 
 
 
-        console.log('');
+        if (!contactId) {
+            return null;
+        }
+
+
+
+        const normalizedId =
+            normalizeWhatsAppId(contactId);
+
+
+
+        if (!normalizedId) {
+            return null;
+        }
+
+
 
         console.log(
-
-            '========== GROUP DEBUG START =========='
-
+            `[CONTACT] Looking up contact: ${normalizedId}`
         );
 
 
 
+        const contact =
+            await client.getContactById(
+                normalizedId
+            );
+
+
+
+        return contact || null;
+
+
+
+    } catch (error) {
+
+
+
         console.log(
-
-            '[GROUP] groupWhatsappId:',
-
-            groupWhatsappId
-
+            `[CONTACT] getContactById failed for ${contactId}:`,
+            error.message
         );
 
 
 
-        if (!groupWhatsappId) {
+        return null;
+
+    }
+
+}
+
+
+
+async function resolveLidToPhone(lid) {
+
+
+
+    try {
+
+
+
+        if (!lid) {
+            return null;
+        }
+
+
+
+        if (!lid.endsWith('@lid')) {
+            return extractPhoneFromId(lid);
+        }
+
+
+
+        console.log(
+            `[LID] Resolving LID: ${lid}`
+        );
+
+
+
+        if (
+            typeof client.getContactLidAndPhone !==
+            'function'
+        ) {
 
 
 
             console.log(
+                '[LID] getContactLidAndPhone() is not available'
+            );
 
-                '[GROUP] No group ID'
 
+
+            return null;
+
+        }
+
+
+
+        const result =
+            await client.getContactLidAndPhone([
+                lid
+            ]);
+
+
+
+        console.log(
+            '[LID] Resolution result:',
+            result
+        );
+
+
+
+        if (
+            Array.isArray(result) &&
+            result.length > 0 &&
+            result[0]
+        ) {
+
+
+
+            const phone =
+                result[0].pn;
+
+
+
+            if (phone) {
+
+
+
+                return phone.replace(
+                    '@c.us',
+                    ''
+                );
+
+            }
+
+        }
+
+
+
+        return null;
+
+
+
+    } catch (error) {
+
+
+
+        console.log(
+            '[LID] Failed to resolve LID:',
+            error.message
+        );
+
+
+
+        return null;
+
+    }
+
+}
+
+
+
+// ============================================================
+// SENDER INFO
+// ============================================================
+
+
+
+async function getSenderInfo(msg) {
+
+
+
+    let senderId = null;
+    let senderNumber = null;
+    let senderName = null;
+
+
+
+    try {
+
+
+
+        senderId =
+            normalizeWhatsAppId(msg.author) ||
+            normalizeWhatsAppId(
+                msg.id?.participant
+            ) ||
+            normalizeWhatsAppId(msg.from);
+
+
+
+        console.log(
+            '[SENDER] Initial sender ID:',
+            senderId
+        );
+
+
+
+        if (!senderId) {
+
+
+
+            console.log(
+                '[SENDER] Sender ID unavailable'
             );
 
 
@@ -1948,9 +1161,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-                groupName: null,
-
-                chat: null
+                senderId: null,
+                senderNumber: null,
+                senderName: 'Unknown Sender'
 
 
 
@@ -1960,11 +1173,21 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-        // --------------------------------------------------------
+        senderNumber =
+            extractPhoneFromId(senderId);
 
-        // 1. WWebJS
 
-        // --------------------------------------------------------
+
+        if (senderNumber) {
+
+
+
+            console.log(
+                '[SENDER] Phone from ID:',
+                senderNumber
+            );
+
+        }
 
 
 
@@ -1972,722 +1195,251 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-            if (
+            console.log(
+                '[SENDER] Trying msg.getContact()...'
+            );
 
-                client.pupPage &&
 
-                !client.pupPage.isClosed()
 
-            ) {
+            const contact =
+                await msg.getContact();
+
+
+
+            if (contact) {
 
 
 
                 console.log(
-
-                    '[GROUP-WWEBJS] Trying WWebJS.getChat()...'
-
+                    '[SENDER] Contact found'
                 );
 
 
 
-                const result =
+                senderName =
+                    getBestContactName(contact);
 
-                    await client.pupPage.evaluate(
 
-                        async (groupId) => {
 
+                if (
+                    !senderNumber &&
+                    contact.id?.user
+                ) {
 
 
-                            try {
 
+                    senderNumber =
+                        contact.id.user;
 
+                }
 
-                                if (
 
-                                    !window.WWebJS ||
 
-                                    typeof window.WWebJS.getChat !== 'function'
+                console.log(
+                    '[SENDER] Contact name:',
+                    senderName || 'Not available'
+                );
 
-                                ) {
 
 
+                console.log(
+                    '[SENDER] Contact number:',
+                    senderNumber || 'Not available'
+                );
 
-                                    return {
+            }
 
 
 
-                                        ok: false,
+        } catch (error) {
 
 
 
-                                        error:
+            console.log(
+                '[SENDER] msg.getContact() failed:',
+                error.message
+            );
 
-                                            'WWebJS.getChat unavailable'
+        }
 
 
 
-                                    };
+        if (
+            senderId.endsWith('@lid') &&
+            !senderNumber
+        ) {
 
-                                }
 
 
+            senderNumber =
+                await resolveLidToPhone(
+                    senderId
+                );
 
-                                const chat =
 
-                                    await window.WWebJS.getChat(
 
-                                        groupId,
+            if (senderNumber) {
 
-                                        {
 
-                                            getAsModel: true
 
-                                        }
+                console.log(
+                    '[SENDER] LID resolved to phone:',
+                    senderNumber
+                );
 
-                                    );
+            }
 
+        }
 
 
-                                if (!chat) {
 
+        if (
+            senderNumber &&
+            !senderName
+        ) {
 
 
-                                    return {
 
+            const phoneId =
+                `${senderNumber}@c.us`;
 
 
-                                        ok: false,
 
+            console.log(
+                '[SENDER] Trying phone contact:',
+                phoneId
+            );
 
 
-                                        error:
 
-                                            'WWebJS returned no chat'
+            const phoneContact =
+                await safeGetContact(
+                    phoneId
+                );
 
 
 
-                                    };
+            if (phoneContact) {
 
-                                }
 
 
-
-                                const name =
-
-                                    chat.name ||
-
-                                    chat.formattedTitle ||
-
-                                    chat.groupMetadata?.subject ||
-
-                                    chat.groupMetadata?.name ||
-
-                                    null;
-
-
-
-                                return {
-
-
-
-                                    ok: true,
-
-
-
-                                    name,
-
-
-
-                                    id:
-
-                                        chat.id?._serialized ||
-
-                                        chat.id?.$1 ||
-
-                                        null,
-
-
-
-                                    isGroup:
-
-                                        chat.isGroup ||
-
-                                        chat.id?.server === 'g.us' ||
-
-                                        false
-
-
-
-                                };
-
-
-
-                            } catch (error) {
-
-
-
-                                return {
-
-
-
-                                    ok: false,
-
-
-
-                                    error:
-
-                                        error?.message ||
-
-                                        String(error)
-
-
-
-                                };
-
-                            }
-
-                        },
-
-                        groupWhatsappId
-
+                senderName =
+                    getBestContactName(
+                        phoneContact
                     );
 
 
 
                 console.log(
-
-                    '[GROUP-WWEBJS] Result:',
-
-                    result
-
+                    '[SENDER] Phone contact name:',
+                    senderName || 'Not available'
                 );
 
-
-
-                if (
-
-                    result?.ok &&
-
-                    result?.name
-
-                ) {
-
-
-
-                    groupName =
-
-                        result.name;
-
-
-
-                    return {
-
-
-
-                        groupName,
-
-                        chat: null
-
-
-
-                    };
-
-                }
-
             }
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                '[GROUP-WWEBJS] Lookup failed:',
-
-                error?.message || error
-
-            );
 
         }
 
 
 
-        // --------------------------------------------------------
-
-        // 2. WAWebCollections
-
-        // --------------------------------------------------------
+        if (!senderName) {
 
 
 
-        try {
-
-
-
-            if (
-
-                client.pupPage &&
-
-                !client.pupPage.isClosed()
-
-            ) {
-
-
-
-                console.log(
-
-                    '[GROUP-COLLECTION] Trying WAWebCollections.Chat...'
-
+            const originalContact =
+                await safeGetContact(
+                    senderId
                 );
 
 
 
-                const result =
+            if (originalContact) {
 
-                    await client.pupPage.evaluate(
 
-                        async (groupId) => {
 
-
-
-                            try {
-
-
-
-                                const collections =
-
-                                    window.require(
-
-                                        'WAWebCollections'
-
-                                    );
-
-
-
-                                if (!collections) {
-
-
-
-                                    return {
-
-
-
-                                        ok: false,
-
-
-
-                                        error:
-
-                                            'WAWebCollections unavailable'
-
-
-
-                                    };
-
-                                }
-
-
-
-                                let chat = null;
-
-
-
-                                if (collections.Chat) {
-
-
-
-                                    try {
-
-
-
-                                        chat =
-
-                                            collections.Chat.get(
-
-                                                groupId
-
-                                            );
-
-
-
-                                    } catch (_) {}
-
-
-
-                                    if (!chat) {
-
-
-
-                                        try {
-
-
-
-                                            chat =
-
-                                                await collections.Chat.find(
-
-                                                    groupId
-
-                                                );
-
-
-
-                                        } catch (_) {}
-
-                                    }
-
-                                }
-
-
-
-                                if (!chat) {
-
-
-
-                                    return {
-
-
-
-                                        ok: false,
-
-
-
-                                        error:
-
-                                            'Chat not found'
-
-
-
-                                    };
-
-                                }
-
-
-
-                                const name =
-
-                                    chat.name ||
-
-                                    chat.formattedTitle ||
-
-                                    chat.groupMetadata?.subject ||
-
-                                    chat.groupMetadata?.name ||
-
-                                    null;
-
-
-
-                                return {
-
-
-
-                                    ok: true,
-
-
-
-                                    name,
-
-
-
-                                    id:
-
-                                        chat.id?._serialized ||
-
-                                        chat.id?.$1 ||
-
-                                        null,
-
-
-
-                                    isGroup:
-
-                                        chat.isGroup ||
-
-                                        chat.id?.server === 'g.us' ||
-
-                                        false
-
-
-
-                                };
-
-
-
-                            } catch (error) {
-
-
-
-                                return {
-
-
-
-                                    ok: false,
-
-
-
-                                    error:
-
-                                        error?.message ||
-
-                                        String(error)
-
-
-
-                                };
-
-                            }
-
-                        },
-
-                        groupWhatsappId
-
+                senderName =
+                    getBestContactName(
+                        originalContact
                     );
 
-
-
-                console.log(
-
-                    '[GROUP-COLLECTION] Result:',
-
-                    result
-
-                );
-
-
-
-                if (
-
-                    result?.ok &&
-
-                    result?.name
-
-                ) {
-
-
-
-                    groupName =
-
-                        result.name;
-
-
-
-                    return {
-
-
-
-                        groupName,
-
-                        chat: null
-
-
-
-                    };
-
-                }
-
             }
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                '[GROUP-COLLECTION] Lookup failed:',
-
-                error?.message || error
-
-            );
 
         }
 
 
 
-        // --------------------------------------------------------
-
-        // 3. getChatById
-
-        // --------------------------------------------------------
+        if (!senderName) {
 
 
 
-        try {
-
-
-
-            console.log(
-
-                '[GROUP-FALLBACK] Trying client.getChatById()...'
-
-            );
-
-
-
-            const chat =
-
-                await client.getChatById(
-
-                    groupWhatsappId
-
-                );
-
-
-
-            if (chat) {
-
-
-
-                groupName =
-
-                    chat.name ||
-
-                    chat.formattedTitle ||
-
-                    chat.groupMetadata?.subject ||
-
-                    chat.groupMetadata?.name ||
-
-                    null;
-
-
-
-                if (groupName) {
-
-
-
-                    return {
-
-
-
-                        groupName,
-
-                        chat
-
-
-
-                    };
-
-                }
-
+            if (senderNumber) {
+                senderName = senderNumber;
+            } else {
+                senderName = senderId;
             }
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                '[GROUP-FALLBACK] client.getChatById failed:',
-
-                error?.message || error
-
-            );
 
         }
 
 
 
-        // --------------------------------------------------------
-
-        // 4. msg.getChat()
-
-        // --------------------------------------------------------
-
-
-
-        try {
-
-
-
-            console.log(
-
-                '[GROUP-MESSAGE] Trying msg.getChat()...'
-
-            );
-
-
-
-            const chat =
-
-                await msg.getChat();
-
-
-
-            if (chat) {
-
-
-
-                groupName =
-
-                    chat.name ||
-
-                    chat.formattedTitle ||
-
-                    chat.groupMetadata?.subject ||
-
-                    chat.groupMetadata?.name ||
-
-                    null;
-
-
-
-                if (groupName) {
-
-
-
-                    return {
-
-
-
-                        groupName,
-
-                        chat
-
-
-
-                    };
-
-                }
-
-            }
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                '[GROUP-MESSAGE] msg.getChat() failed:',
-
-                error?.message || error
-
-            );
-
-        }
-
-
-
+        console.log('');
         console.log(
-
-            '[GROUP] Group name could not be resolved'
-
+            '========== SENDER INFO =========='
         );
 
 
 
         console.log(
+            'Sender ID:',
+            senderId
+        );
 
-            '========== GROUP DEBUG END =========='
 
+
+        console.log(
+            'Sender Number:',
+            senderNumber
+        );
+
+
+
+        console.log(
+            'Sender Name:',
+            senderName
+        );
+
+
+
+        console.log(
+            '================================='
+        );
+
+
+
+        console.log('');
+
+
+
+        return {
+
+
+
+            senderId,
+            senderNumber,
+            senderName
+
+
+
+        };
+
+
+
+    } catch (error) {
+
+
+
+        console.error(
+            '[SENDER] Unexpected sender lookup error:',
+            error.message
         );
 
 
@@ -2696,12 +1448,81 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-            groupName:
+            senderId:
+                senderId ||
+                normalizeWhatsAppId(
+                    msg.author
+                ) ||
+                normalizeWhatsAppId(
+                    msg.from
+                ),
 
-                groupName || null,
+
+
+            senderNumber:
+                senderNumber || null,
 
 
 
+            senderName:
+                senderName ||
+                senderNumber ||
+                senderId ||
+                'Unknown Sender'
+
+
+
+        };
+
+    }
+
+}
+
+
+
+// ============================================================
+// GROUP INFO
+// ============================================================
+
+
+
+async function getGroupInfo(msg, groupWhatsappId) {
+
+
+
+    let groupName = null;
+
+
+
+    console.log('');
+    console.log(
+        '========== GROUP DEBUG START =========='
+    );
+
+
+
+    console.log(
+        '[GROUP] groupWhatsappId:',
+        groupWhatsappId
+    );
+
+
+
+    if (!groupWhatsappId) {
+
+
+
+        console.log(
+            '[GROUP] No group ID'
+        );
+
+
+
+        return {
+
+
+
+            groupName: null,
             chat: null
 
         };
@@ -2710,75 +1531,34 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-    // ============================================================
+    // --------------------------------------------------------
 
-    // MEDIA DOWNLOAD
+    // 1. WWebJS
 
-    // ============================================================
-
-
-
-    async function downloadMediaWithFallback(msg) {
+    // --------------------------------------------------------
 
 
 
-        if (!msg || !msg.hasMedia) {
-
-            return null;
-
-        }
+    try {
 
 
 
-        const resolvedMessageId =
-
-            getMessageSerializedId(msg);
-
-
-
-        console.log(
-
-            '[MEDIA] Resolved message ID:',
-
-            resolvedMessageId
-
-        );
+        if (
+            client.pupPage &&
+            !client.pupPage.isClosed()
+        ) {
 
 
 
-        if (!resolvedMessageId) {
-
-            return null;
-
-        }
+            console.log(
+                '[GROUP-WWEBJS] Trying WWebJS.getChat()...'
+            );
 
 
 
-        // --------------------------------------------------------
-
-        // Repair internal ID
-
-        // --------------------------------------------------------
-
-
-
-        try {
-
-
-
-            if (
-
-                client.pupPage &&
-
-                !client.pupPage.isClosed()
-
-            ) {
-
-
-
+            const result =
                 await client.pupPage.evaluate(
-
-                    async (messageId) => {
+                    async (groupId) => {
 
 
 
@@ -2786,137 +1566,71 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-                            const store =
-
-                                window.Store;
-
-
-
                             if (
-
-                                !store ||
-
-                                !store.Msg
-
+                                !window.WWebJS ||
+                                typeof window.WWebJS.getChat !== 'function'
                             ) {
 
 
 
-                                throw new Error(
+                                return {
 
-                                    'WhatsApp Store.Msg unavailable'
 
+
+                                    ok: false,
+
+
+
+                                    error:
+                                        'WWebJS.getChat unavailable'
+
+
+
+                                };
+
+                            }
+
+
+
+                            const chat =
+                                await window.WWebJS.getChat(
+                                    groupId,
+                                    {
+                                        getAsModel: true
+                                    }
                                 );
 
-                            }
+
+
+                            if (!chat) {
 
 
 
-                            let message =
-
-                                store.Msg.get(
-
-                                    messageId
-
-                                );
+                                return {
 
 
 
-                            if (!message) {
+                                    ok: false,
 
 
 
-                                const messages =
-
-                                    store.Msg.getMessagesById
-
-                                        ? store.Msg.getMessagesById([
-
-                                            messageId
-
-                                        ])
-
-                                        : null;
+                                    error:
+                                        'WWebJS returned no chat'
 
 
 
-                                if (
-
-                                    messages &&
-
-                                    messages.length
-
-                                ) {
-
-
-
-                                    message =
-
-                                        messages[0];
-
-                                }
+                                };
 
                             }
 
 
 
-                            if (!message) {
-
-
-
-                                throw new Error(
-
-                                    'Message not found in WA Store'
-
-                                );
-
-                            }
-
-
-
-                            if (
-
-                                message.id &&
-
-                                !message.id._serialized &&
-
-                                message.id.$1
-
-                            ) {
-
-
-
-                                try {
-
-
-
-                                    Object.defineProperty(
-
-                                        message.id,
-
-                                        '_serialized',
-
-                                        {
-
-                                            configurable: true,
-
-                                            enumerable: true,
-
-                                            get() {
-
-                                                return this.$1;
-
-                                            }
-
-                                        }
-
-                                    );
-
-
-
-                                } catch (_) {}
-
-                            }
+                            const name =
+                                chat.name ||
+                                chat.formattedTitle ||
+                                chat.groupMetadata?.subject ||
+                                chat.groupMetadata?.name ||
+                                null;
 
 
 
@@ -2924,17 +1638,25 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-                                found: true,
+                                ok: true,
 
 
 
-                                serialized:
+                                name,
 
-                                    message.id?._serialized ||
 
-                                    message.id?.$1 ||
 
-                                    null
+                                id:
+                                    chat.id?._serialized ||
+                                    chat.id?.$1 ||
+                                    null,
+
+
+
+                                isGroup:
+                                    chat.isGroup ||
+                                    chat.id?.server === 'g.us' ||
+                                    false
 
 
 
@@ -2950,355 +1672,160 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-                                found: false,
+                                ok: false,
 
 
 
                                 error:
-
                                     error?.message ||
-
                                     String(error)
-
-
 
                             };
 
                         }
 
                     },
-
-                    resolvedMessageId
-
+                    groupWhatsappId
                 );
-
-            }
-
-
-
-        } catch (error) {
 
 
 
             console.log(
-
-                '[MEDIA] Internal ID repair warning:',
-
-                error.message
-
+                '[GROUP-WWEBJS] Result:',
+                result
             );
+
+
+
+            if (
+                result?.ok &&
+                result?.name
+            ) {
+
+
+
+                groupName =
+                    result.name;
+
+
+
+                return {
+
+
+
+                    groupName,
+                    chat: null
+
+                };
+
+            }
 
         }
 
 
 
-        // --------------------------------------------------------
-
-        // Patch public message ID
-
-        // --------------------------------------------------------
+    } catch (error) {
 
 
 
-        try {
+        console.log(
+            '[GROUP-WWEBJS] Lookup failed:',
+            error?.message || error
+        );
+
+    }
 
 
 
-            if (
+    // --------------------------------------------------------
 
-                msg.id &&
+    // 2. WAWebCollections
 
-                !msg.id._serialized &&
-
-                msg.id.$1
-
-            ) {
+    // --------------------------------------------------------
 
 
 
-                Object.defineProperty(
-
-                    msg.id,
-
-                    '_serialized',
-
-                    {
-
-                        configurable: true,
-
-                        enumerable: true,
-
-                        get() {
-
-                            return this.$1;
-
-                        }
-
-                    }
-
-                );
-
-            }
+    try {
 
 
 
-        } catch (_) {}
-
-
-
-        // --------------------------------------------------------
-
-        // Normal download
-
-        // --------------------------------------------------------
-
-
-
-        try {
+        if (
+            client.pupPage &&
+            !client.pupPage.isClosed()
+        ) {
 
 
 
             console.log(
-
-                '[MEDIA] Calling downloadMedia()...'
-
+                '[GROUP-COLLECTION] Trying WAWebCollections.Chat...'
             );
 
 
 
-            const media =
+            const result =
+                await client.pupPage.evaluate(
+                    async (groupId) => {
 
-                await msg.downloadMedia();
 
 
+                        try {
 
-            if (
 
-                media &&
 
-                media.data
+                            const collections =
+                                window.require(
+                                    'WAWebCollections'
+                                );
 
-            ) {
 
 
+                            if (!collections) {
 
-                console.log(
 
-                    '[MEDIA] Media downloaded successfully'
 
-                );
+                                return {
 
 
 
-                return media;
+                                    ok: false,
 
-            }
 
 
+                                    error:
+                                        'WAWebCollections unavailable'
 
-        } catch (error) {
 
 
+                                };
 
-            console.log(
+                            }
 
-                '[MEDIA] First downloadMedia() failed:',
 
-                error.message
 
-            );
+                            let chat = null;
 
-        }
 
 
+                            if (collections.Chat) {
 
-        // --------------------------------------------------------
 
-        // Retry
 
-        // --------------------------------------------------------
+                                try {
 
 
 
-        try {
+                                    chat =
+                                        collections.Chat.get(
+                                            groupId
+                                        );
 
 
 
-            await new Promise(resolve =>
+                                } catch (_) {}
 
-                setTimeout(resolve, 3000)
 
-            );
 
-
-
-            const media =
-
-                await msg.downloadMedia();
-
-
-
-            if (
-
-                media &&
-
-                media.data
-
-            ) {
-
-
-
-                console.log(
-
-                    '[MEDIA] Media downloaded on retry'
-
-                );
-
-
-
-                return media;
-
-            }
-
-
-
-        } catch (error) {
-
-
-
-            console.log(
-
-                '[MEDIA] Retry downloadMedia() failed:',
-
-                error.message
-
-            );
-
-        }
-
-
-
-        // --------------------------------------------------------
-
-        // Direct Store fallback
-
-        // --------------------------------------------------------
-
-
-
-        try {
-
-
-
-            if (
-
-                client.pupPage &&
-
-                !client.pupPage.isClosed()
-
-            ) {
-
-
-
-                console.log(
-
-                    '[MEDIA] Trying direct WhatsApp Store fallback...'
-
-                );
-
-
-
-                const directResult =
-
-                    await client.pupPage.evaluate(
-
-                        async (messageId) => {
-
-
-
-                            try {
-
-
-
-                                const store =
-
-                                    window.Store;
-
-
-
-                                if (
-
-                                    !store ||
-
-                                    !store.Msg
-
-                                ) {
-
-
-
-                                    return {
-
-
-
-                                        ok: false,
-
-
-
-                                        error:
-
-                                            'Store.Msg unavailable'
-
-
-
-                                    };
-
-                                }
-
-
-
-                                let message =
-
-                                    store.Msg.get(
-
-                                        messageId
-
-                                    );
-
-
-
-                                if (!message) {
-
-
-
-                                    return {
-
-
-
-                                        ok: false,
-
-
-
-                                        error:
-
-                                            'Message not found'
-
-
-
-                                    };
-
-                                }
-
-
-
-                                if (
-
-                                    message.id &&
-
-                                    !message.id._serialized &&
-
-                                    message.id.$1
-
-                                ) {
+                                if (!chat) {
 
 
 
@@ -3306,27 +1833,10 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-                                        Object.defineProperty(
-
-                                            message.id,
-
-                                            '_serialized',
-
-                                            {
-
-                                                configurable: true,
-
-                                                enumerable: true,
-
-                                                get() {
-
-                                                    return this.$1;
-
-                                                }
-
-                                            }
-
-                                        );
+                                        chat =
+                                            await collections.Chat.find(
+                                                groupId
+                                            );
 
 
 
@@ -3334,190 +1844,925 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
                                 }
 
+                            }
 
 
-                                if (!message.mediaData) {
 
+                            if (!chat) {
 
 
-                                    return {
 
+                                return {
 
 
-                                        ok: false,
 
+                                    ok: false,
 
 
-                                        error:
 
-                                            'mediaData unavailable'
+                                    error:
+                                        'Chat not found'
 
 
 
-                                    };
+                                };
 
-                                }
+                            }
 
 
 
-                                if (
+                            const name =
+                                chat.name ||
+                                chat.formattedTitle ||
+                                chat.groupMetadata?.subject ||
+                                chat.groupMetadata?.name ||
+                                null;
 
-                                    message.mediaData.mediaStage !==
 
-                                    'RESOLVED'
 
-                                ) {
+                            return {
 
 
 
-                                    await message.downloadMedia({
+                                ok: true,
 
-                                        downloadEvenIfExpensive: true,
 
-                                        rmrReason: 1,
 
-                                        downloadQpl: true
+                                name,
 
-                                    });
 
-                                }
 
+                                id:
+                                    chat.id?._serialized ||
+                                    chat.id?.$1 ||
+                                    null,
 
 
-                                const mediaData =
 
-                                    message.mediaData;
+                                isGroup:
+                                    chat.isGroup ||
+                                    chat.id?.server === 'g.us' ||
+                                    false
 
 
 
-                                if (
+                            };
 
-                                    !mediaData ||
 
-                                    !mediaData.mediaStage
 
-                                ) {
+                        } catch (error) {
 
 
 
-                                    return {
+                            return {
 
 
 
-                                        ok: false,
+                                ok: false,
 
 
 
-                                        error:
+                                error:
+                                    error?.message ||
+                                    String(error)
 
-                                            'Media stage unavailable'
+                            };
 
+                        }
 
+                    },
+                    groupWhatsappId
+                );
 
-                                    };
 
-                                }
 
+            console.log(
+                '[GROUP-COLLECTION] Result:',
+                result
+            );
 
 
-                                if (
 
-                                    String(
+            if (
+                result?.ok &&
+                result?.name
+            ) {
 
-                                        mediaData.mediaStage
 
-                                    ).includes('ERROR')
 
-                                ) {
+                groupName =
+                    result.name;
 
 
 
-                                    return {
+                return {
 
 
 
-                                        ok: false,
+                    groupName,
+                    chat: null
 
+                };
 
+            }
 
-                                        error:
+        }
 
-                                            `Media stage: ${mediaData.mediaStage}`
 
 
+    } catch (error) {
 
-                                    };
 
-                                }
 
+        console.log(
+            '[GROUP-COLLECTION] Lookup failed:',
+            error?.message || error
+        );
 
+    }
 
-                                if (
 
-                                    typeof window.WWebJS?.getMessageMedia ===
 
-                                    'function'
+    // --------------------------------------------------------
 
-                                ) {
+    // 3. getChatById
 
+    // --------------------------------------------------------
 
 
-                                    const result =
 
-                                        await window.WWebJS.getMessageMedia(
+    try {
 
-                                            message
 
-                                        );
 
+        console.log(
+            '[GROUP-FALLBACK] Trying client.getChatById()...'
+        );
 
 
-                                    if (
 
-                                        result &&
+        const chat =
+            await client.getChatById(
+                groupWhatsappId
+            );
 
-                                        result.data
 
-                                    ) {
 
+        if (chat) {
 
 
-                                        return {
 
+            groupName =
+                chat.name ||
+                chat.formattedTitle ||
+                chat.groupMetadata?.subject ||
+                chat.groupMetadata?.name ||
+                null;
 
 
-                                            ok: true,
 
+            if (groupName) {
 
 
-                                            media: result
 
+                return {
 
 
-                                        };
 
+                    groupName,
+                    chat
+
+                };
+
+            }
+
+        }
+
+
+
+    } catch (error) {
+
+
+
+        console.log(
+            '[GROUP-FALLBACK] client.getChatById failed:',
+            error?.message || error
+        );
+
+    }
+
+
+
+    // --------------------------------------------------------
+
+    // 4. msg.getChat()
+
+    // --------------------------------------------------------
+
+
+
+    try {
+
+
+
+        console.log(
+            '[GROUP-MESSAGE] Trying msg.getChat()...'
+        );
+
+
+
+        const chat =
+            await msg.getChat();
+
+
+
+        if (chat) {
+
+
+
+            groupName =
+                chat.name ||
+                chat.formattedTitle ||
+                chat.groupMetadata?.subject ||
+                chat.groupMetadata?.name ||
+                null;
+
+
+
+            if (groupName) {
+
+
+
+                return {
+
+
+
+                    groupName,
+                    chat
+
+                };
+
+            }
+
+        }
+
+
+
+    } catch (error) {
+
+
+
+        console.log(
+            '[GROUP-MESSAGE] msg.getChat() failed:',
+            error?.message || error
+        );
+
+    }
+
+
+
+    console.log(
+        '[GROUP] Group name could not be resolved'
+    );
+
+
+
+    console.log(
+        '========== GROUP DEBUG END =========='
+    );
+
+
+
+    return {
+
+
+
+        groupName:
+            groupName || null,
+
+
+
+        chat: null
+
+    };
+
+}
+
+
+
+// ============================================================
+// MEDIA DOWNLOAD
+// ============================================================
+
+
+
+async function downloadMediaWithFallback(msg) {
+
+
+
+    if (!msg || !msg.hasMedia) {
+        return null;
+    }
+
+
+
+    const resolvedMessageId =
+        getMessageSerializedId(msg);
+
+
+
+    console.log(
+        '[MEDIA] Resolved message ID:',
+        resolvedMessageId
+    );
+
+
+
+    if (!resolvedMessageId) {
+        return null;
+    }
+
+
+
+    // --------------------------------------------------------
+
+    // Repair internal ID
+
+    // --------------------------------------------------------
+
+
+
+    try {
+
+
+
+        if (
+            client.pupPage &&
+            !client.pupPage.isClosed()
+        ) {
+
+
+
+            await client.pupPage.evaluate(
+                async (messageId) => {
+
+
+
+                    try {
+
+
+
+                        const store =
+                            window.Store;
+
+
+
+                        if (
+                            !store ||
+                            !store.Msg
+                        ) {
+
+
+
+                            throw new Error(
+                                'WhatsApp Store.Msg unavailable'
+                            );
+
+                        }
+
+
+
+                        let message =
+                            store.Msg.get(
+                                messageId
+                            );
+
+
+
+                        if (!message) {
+
+
+
+                            const messages =
+                                store.Msg.getMessagesById
+                                    ? store.Msg.getMessagesById([
+                                        messageId
+                                    ])
+                                    : null;
+
+
+
+                            if (
+                                messages &&
+                                messages.length
+                            ) {
+
+
+
+                                message =
+                                    messages[0];
+
+                            }
+
+                        }
+
+
+
+                        if (!message) {
+
+
+
+                            throw new Error(
+                                'Message not found in WA Store'
+                            );
+
+                        }
+
+
+
+                        if (
+                            message.id &&
+                            !message.id._serialized &&
+                            message.id.$1
+                        ) {
+
+
+
+                            try {
+
+
+
+                                Object.defineProperty(
+                                    message.id,
+                                    '_serialized',
+                                    {
+                                        configurable: true,
+                                        enumerable: true,
+                                        get() {
+                                            return this.$1;
+                                        }
                                     }
-
-                                }
-
+                                );
 
 
-                                const base64 =
 
-                                    mediaData?.body ||
+                            } catch (_) {}
 
-                                    mediaData?.data ||
+                        }
 
-                                    null;
+
+
+                        return {
+
+
+
+                            found: true,
+
+
+
+                            serialized:
+                                message.id?._serialized ||
+                                message.id?.$1 ||
+                                null
+
+
+
+                        };
+
+
+
+                    } catch (error) {
+
+
+
+                        return {
+
+
+
+                            found: false,
+
+
+
+                            error:
+                                error?.message ||
+                                String(error)
+
+                        };
+
+                    }
+
+                },
+                resolvedMessageId
+            );
+
+        }
+
+
+
+    } catch (error) {
+
+
+
+        console.log(
+            '[MEDIA] Internal ID repair warning:',
+            error.message
+        );
+
+    }
+
+
+
+    // --------------------------------------------------------
+
+    // Patch public message ID
+
+    // --------------------------------------------------------
+
+
+
+    try {
+
+
+
+        if (
+            msg.id &&
+            !msg.id._serialized &&
+            msg.id.$1
+        ) {
+
+
+
+            Object.defineProperty(
+                msg.id,
+                '_serialized',
+                {
+                    configurable: true,
+                    enumerable: true,
+                    get() {
+                        return this.$1;
+                    }
+                }
+            );
+
+        }
+
+
+
+    } catch (_) {}
+
+
+
+    // --------------------------------------------------------
+
+    // Normal download
+
+    // --------------------------------------------------------
+
+
+
+    try {
+
+
+
+        console.log(
+            '[MEDIA] Calling downloadMedia()...'
+        );
+
+
+
+        const media =
+            await msg.downloadMedia();
+
+
+
+        if (
+            media &&
+            media.data
+        ) {
+
+
+
+            console.log(
+                '[MEDIA] Media downloaded successfully'
+            );
+
+
+
+            return media;
+
+        }
+
+
+
+    } catch (error) {
+
+
+
+        console.log(
+            '[MEDIA] First downloadMedia() failed:',
+            error.message
+        );
+
+    }
+
+
+
+    // --------------------------------------------------------
+
+    // Retry
+
+    // --------------------------------------------------------
+
+
+
+    try {
+
+
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 3000)
+        );
+
+
+
+        const media =
+            await msg.downloadMedia();
+
+
+
+        if (
+            media &&
+            media.data
+        ) {
+
+
+
+            console.log(
+                '[MEDIA] Media downloaded on retry'
+            );
+
+
+
+            return media;
+
+        }
+
+
+
+    } catch (error) {
+
+
+
+        console.log(
+            '[MEDIA] Retry downloadMedia() failed:',
+            error.message
+        );
+
+    }
+
+
+
+    // --------------------------------------------------------
+
+    // Direct Store fallback
+
+    // --------------------------------------------------------
+
+
+
+    try {
+
+
+
+        if (
+            client.pupPage &&
+            !client.pupPage.isClosed()
+        ) {
+
+
+
+            console.log(
+                '[MEDIA] Trying direct WhatsApp Store fallback...'
+            );
+
+
+
+            const directResult =
+                await client.pupPage.evaluate(
+                    async (messageId) => {
+
+
+
+                        try {
+
+
+
+                            const store =
+                                window.Store;
+
+
+
+                            if (
+                                !store ||
+                                !store.Msg
+                            ) {
+
+
+
+                                return {
+
+
+
+                                    ok: false,
+
+
+
+                                    error:
+                                        'Store.Msg unavailable'
+
+
+
+                                };
+
+                            }
+
+
+
+                            let message =
+                                store.Msg.get(
+                                    messageId
+                                );
+
+
+
+                            if (!message) {
+
+
+
+                                return {
+
+
+
+                                    ok: false,
+
+
+
+                                    error:
+                                        'Message not found'
+
+
+
+                                };
+
+                            }
+
+
+
+                            if (
+                                message.id &&
+                                !message.id._serialized &&
+                                message.id.$1
+                            ) {
+
+
+
+                                try {
+
+
+
+                                    Object.defineProperty(
+                                        message.id,
+                                        '_serialized',
+                                        {
+                                            configurable: true,
+                                            enumerable: true,
+                                            get() {
+                                                return this.$1;
+                                            }
+                                        }
+                                    );
+
+
+
+                                } catch (_) {}
+
+                            }
+
+
+
+                            if (!message.mediaData) {
+
+
+
+                                return {
+
+
+
+                                    ok: false,
+
+
+
+                                    error:
+                                        'mediaData unavailable'
+
+
+
+                                };
+
+                            }
+
+
+
+                            if (
+                                message.mediaData.mediaStage !==
+                                'RESOLVED'
+                            ) {
+
+
+
+                                await message.downloadMedia({
+                                    downloadEvenIfExpensive: true,
+                                    rmrReason: 1,
+                                    downloadQpl: true
+                                });
+
+                            }
+
+
+
+                            const mediaData =
+                                message.mediaData;
+
+
+
+                            if (
+                                !mediaData ||
+                                !mediaData.mediaStage
+                            ) {
+
+
+
+                                return {
+
+
+
+                                    ok: false,
+
+
+
+                                    error:
+                                        'Media stage unavailable'
+
+
+
+                                };
+
+                            }
+
+
+
+                            if (
+                                String(
+                                    mediaData.mediaStage
+                                ).includes('ERROR')
+                            ) {
+
+
+
+                                return {
+
+
+
+                                    ok: false,
+
+
+
+                                    error:
+                                        `Media stage: ${mediaData.mediaStage}`
+
+                                };
+
+                            }
+
+
+
+                            if (
+                                typeof window.WWebJS?.getMessageMedia ===
+                                'function'
+                            ) {
+
+
+
+                                const result =
+                                    await window.WWebJS.getMessageMedia(
+                                        message
+                                    );
 
 
 
                                 if (
-
-                                    typeof base64 === 'string' &&
-
-                                    base64.length > 100
-
+                                    result &&
+                                    result.data
                                 ) {
 
 
@@ -3530,61 +2775,27 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-                                        media: {
-
-
-
-                                            data: base64,
-
-
-
-                                            mimetype:
-
-                                                message.mimetype ||
-
-                                                mediaData.mimetype ||
-
-                                                'application/octet-stream',
-
-
-
-                                            filename:
-
-                                                message.filename ||
-
-                                                mediaData.filename ||
-
-                                                null
-
-
-
-                                        }
+                                        media: result
 
                                     };
 
                                 }
 
-
-
-                                return {
-
-
-
-                                    ok: false,
+                            }
 
 
 
-                                    error:
-
-                                        'Direct media data unavailable'
-
-
-
-                                };
+                            const base64 =
+                                mediaData?.body ||
+                                mediaData?.data ||
+                                null;
 
 
 
-                            } catch (error) {
+                            if (
+                                typeof base64 === 'string' &&
+                                base64.length > 100
+                            ) {
 
 
 
@@ -3592,46 +2803,92 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-                                    ok: false,
+                                    ok: true,
 
 
 
-                                    error:
-
-                                        error?.message ||
-
-                                        String(error)
+                                    media: {
 
 
+
+                                        data: base64,
+
+
+
+                                        mimetype:
+                                            message.mimetype ||
+                                            mediaData.mimetype ||
+                                            'application/octet-stream',
+
+
+
+                                        filename:
+                                            message.filename ||
+                                            mediaData.filename ||
+                                            null
+
+                                    }
 
                                 };
 
                             }
 
-                        },
 
-                        resolvedMessageId
 
-                    );
+                            return {
+
+
+
+                                ok: false,
+
+
+
+                                error:
+                                    'Direct media data unavailable'
+
+
+
+                            };
+
+
+
+                        } catch (error) {
+
+
+
+                            return {
+
+
+
+                                ok: false,
+
+
+
+                                error:
+                                    error?.message ||
+                                    String(error)
+
+                            };
+
+                        }
+
+                    },
+                    resolvedMessageId
+                );
 
 
 
                 if (
-
-                    directResult &&                directResult.ok &&
-
+                    directResult &&
+                    directResult.ok &&
                     directResult.media &&
-
                     directResult.media.data
-
                 ) {
 
 
 
                     console.log(
-
                         '[MEDIA] Direct WhatsApp Store download successful'
-
                     );
 
 
@@ -3643,13 +2900,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 console.log(
-
                     '[MEDIA] Direct fallback failed:',
-
                     directResult?.error ||
-
                     'Unknown error'
-
                 );
 
             }
@@ -3661,11 +2914,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             console.log(
-
                 '[MEDIA] Direct Store fallback failed:',
-
                 error.message
-
             );
 
         }
@@ -3679,9 +2929,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
     // ============================================================
-
     // MEDIA PREPARATION
-
     // ============================================================
 
 
@@ -3695,51 +2943,36 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             if (
-
                 !media ||
-
                 !media.data
-
             ) {
-
                 return null;
-
             }
 
 
 
             let extension;
-
             let mediaFolder;
 
 
 
             if (
-
                 media.mimetype &&
-
                 media.mimetype.startsWith('image/')
-
             ) {
 
 
 
                 const mimeExtension =
-
                     media.mimetype
-
                         .split('/')[1]
-
                         .split(';')[0];
 
 
 
                 extension =
-
                     mimeExtension === 'jpeg'
-
                         ? 'jpg'
-
                         : mimeExtension;
 
 
@@ -3749,45 +2982,33 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             } else if (
-
                 media.mimetype === 'application/pdf'
-
             ) {
 
 
 
                 extension = 'pdf';
-
                 mediaFolder = 'pdfs';
 
 
 
             } else if (
-
                 media.mimetype &&
-
                 media.mimetype.startsWith('video/')
-
             ) {
 
 
 
                 const mimeExtension =
-
                     media.mimetype
-
                         .split('/')[1]
-
                         .split(';')[0];
 
 
 
                 extension =
-
                     mimeExtension === 'quicktime'
-
                         ? 'mov'
-
                         : mimeExtension;
 
 
@@ -3801,11 +3022,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 console.log(
-
                     'Unsupported media type:',
-
                     media.mimetype
-
                 );
 
 
@@ -3817,42 +3035,29 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             const safeMessageId =
-
                 String(messageId)
-
                     .replace(
-
                         /[^a-zA-Z0-9_-]/g,
-
                         '_'
-
                     );
 
 
 
             const filename =
-
                 `${Date.now()}_${safeMessageId}.${extension}`;
 
 
 
             const fileBuffer =
-
                 Buffer.from(
-
                     media.data,
-
                     'base64'
-
                 );
 
 
 
             const databasePath =
-
                 `${MEDIA_BASE_URL}/${mediaFolder}/${encodeURIComponent(filename)}`;
-
-
 
             return {
 
@@ -3867,13 +3072,11 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 mimetype:
-
                     media.mimetype,
 
 
 
                 buffer:
-
                     fileBuffer
 
 
@@ -3887,11 +3090,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             console.error(
-
                 'Failed to prepare media:',
-
                 error.message
-
             );
 
 
@@ -3905,9 +3105,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
     // ============================================================
-
-    // MESSAGE HANDLER
-
+    // MESSAGE HANDLER - GOOGLE SHEETS ONLY
     // ============================================================
 
 
@@ -3921,121 +3119,52 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             console.log('');
-
             console.log(
-
                 '===================================='
-
             );
-
-
-
             console.log(
-
                 'MESSAGE EVENT RECEIVED'
-
             );
-
-
-
             console.log(
-
                 'Time:',
-
                 new Date().toISOString()
-
             );
-
-
-
             console.log(
-
                 'Message ID:',
-
                 getMessageSerializedId(msg) ||
-
                 'undefined'
-
             );
-
-
-
             console.log(
-
                 'Message type:',
-
                 msg.type
-
             );
-
-
-
             console.log(
-
                 'Message body:',
-
                 msg.body || '(empty)'
-
             );
-
-
-
             console.log(
-
                 'Has media:',
-
                 msg.hasMedia
-
             );
-
-
-
             console.log(
-
                 'From:',
-
                 msg.from
-
             );
-
-
-
             console.log(
-
                 'To:',
-
                 msg.to
-
             );
-
-
-
             console.log(
-
                 'From Me:',
-
                 msg.fromMe
-
             );
-
-
-
             console.log(
-
                 'Author:',
-
                 msg.author
-
             );
-
-
-
             console.log(
-
                 'Timestamp:',
-
                 msg.timestamp
-
             );
 
 
@@ -4049,45 +3178,31 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             const groupWhatsappId =
-
                 normalizeWhatsAppId(
-
                     msg.id?.remote
-
                 ) ||
-
                 normalizeWhatsAppId(
-
                     msg.from
-
                 );
 
 
 
             console.log(
-
                 '[GROUP] Detected chat ID:',
-
                 groupWhatsappId
-
             );
 
 
 
             if (
-
                 !groupWhatsappId ||
-
                 !groupWhatsappId.endsWith('@g.us')
-
             ) {
 
 
 
                 console.log(
-
                     'Not a group message — skipped'
-
                 );
 
 
@@ -4099,19 +3214,11 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             console.log(
-
                 'GROUP MESSAGE DETECTED'
-
             );
-
-
-
             console.log(
-
                 'Group WhatsApp ID:',
-
                 groupWhatsappId
-
             );
 
 
@@ -4125,109 +3232,19 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             const {
-
                 groupName
-
             } =
-
                 await getGroupInfo(
-
                     msg,
-
                     groupWhatsappId
-
                 );
 
 
 
             console.log(
-
                 'Final Group Name:',
-
                 groupName ||
-
                 'Unknown Group'
-
-            );
-
-
-
-            // ------------------------------------------------------
-
-            // SAVE / UPDATE GROUP
-
-            // ------------------------------------------------------
-
-
-
-            const groupResult =
-
-                await pool.query(
-
-                    `
-
-                    INSERT INTO groups (
-
-                        whatsapp_group_id,
-
-                        group_name
-
-                    )
-
-                    VALUES ($1, $2)
-
-
-
-                    ON CONFLICT (
-
-                        whatsapp_group_id
-
-                    )
-
-
-
-                    DO UPDATE SET
-
-                        group_name =
-
-                            COALESCE(
-
-                                EXCLUDED.group_name,
-
-                                groups.group_name
-
-                            )
-
-
-
-                    RETURNING id
-
-                    `,
-
-                    [
-
-                        groupWhatsappId,
-
-                        groupName
-
-                    ]
-
-                );
-
-
-
-            const groupId =
-
-                groupResult.rows[0].id;
-
-
-
-            console.log(
-
-                'Database Group ID:',
-
-                groupId
-
             );
 
 
@@ -4241,42 +3258,22 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             const {
-
                 senderId,
-
                 senderNumber,
-
                 senderName
-
             } =
-
                 await getSenderInfo(msg);
             console.log(
-
                 'Final Sender ID:',
-
                 senderId
-
             );
-
-
-
             console.log(
-
                 'Final Sender Number:',
-
                 senderNumber
-
             );
-
-
-
             console.log(
-
                 'Final Sender Name:',
-
                 senderName
-
             );
 
 
@@ -4290,17 +3287,13 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             const messageId =
-
                 getMessageSerializedId(msg);
 
 
 
             console.log(
-
                 'Message ID:',
-
                 messageId
-
             );
 
 
@@ -4310,9 +3303,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 console.log(
-
                     'Message ID unavailable — skipped'
-
                 );
 
 
@@ -4332,25 +3323,17 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             const timestamp =
-
                 Number(msg.timestamp);
 
 
 
             const messageDate =
-
                 timestamp > 0
-
                     ? moment(timestamp * 1000)
-
                         .tz('Asia/Kolkata')
-
                         .format('DD/MM/YYYY HH:mm')
-
                     : moment()
-
                         .tz('Asia/Kolkata')
-
                         .format('DD/MM/YYYY HH:mm');
 
 
@@ -4364,19 +3347,14 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             let hasMedia = false;
-
             let mediaPath = null;
-
             let mediaData = null;
-
             let mediaMimetype = null;
-
             let mediaFilename = null;
 
 
 
             let originalMessage = null;
-
             let locationLink = null;
 
 
@@ -4386,9 +3364,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 console.log(
-
                     '📍 Location message detected'
-
                 );
 
 
@@ -4398,7 +3374,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     const location =
-
                         msg.location;
 
 
@@ -4408,35 +3383,16 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         const lat =
-
                             location.latitude;
-
-
-
                         const lon =
-
                             location.longitude;
-
-
-
                         locationLink =
-
                             `https://www.google.com/maps?q=${lat},${lon}`;
-
-
-
                         originalMessage =
-
                             locationLink;
-
-
-
                         console.log(
-
                             '📍 Location link:',
-
                             locationLink
-
                         );
 
                     }
@@ -4448,17 +3404,10 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.error(
-
                         'Location parsing failed:',
-
                         error.message
-
                     );
-
-
-
                     originalMessage =
-
                         '📍 Location (failed to parse)';
 
                 }
@@ -4470,7 +3419,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 originalMessage =
-
                     msg.body || null;
 
             }
@@ -4490,9 +3438,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                 console.log(
-
                     'Media detected'
-
                 );
 
 
@@ -4502,57 +3448,35 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     const media =
-
                         await downloadMediaWithFallback(
-
                             msg
-
                         );
 
 
 
                     if (
-
                         media &&
-
                         media.data
-
                     ) {
 
 
 
                         hasMedia = true;
-
-
-
                         console.log(
-
                             'MIME type:',
-
                             media.mimetype
-
                         );
-
-
-
                         console.log(
-
                             'Filename:',
-
                             media.filename || 'none'
-
                         );
 
 
 
                         const savedMedia =
-
                             await saveMediaToDisk(
-
                                 media,
-
                                 messageId
-
                             );
 
 
@@ -4562,43 +3486,19 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                             mediaPath =
-
                                 savedMedia.databasePath;
-
-
-
                             mediaData =
-
                                 savedMedia.buffer;
-
-
-
                             mediaMimetype =
-
                                 savedMedia.mimetype;
-
-
-
                             mediaFilename =
-
                                 savedMedia.filename;
-
-
-
                             console.log(
-
                                 'Media prepared successfully'
-
                             );
-
-
-
                             console.log(
-
                                 'Media path:',
-
                                 mediaPath
-
                             );
 
                         }
@@ -4610,9 +3510,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         console.log(
-
                             'Media data unavailable after all attempts'
-
                         );
 
                     }
@@ -4624,11 +3522,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.error(
-
                         'Media processing failed:',
-
                         mediaError.message
-
                     );
 
                 }
@@ -4637,547 +3532,94 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
-            // ------------------------------------------------------
+            // ============================================================
+            // POSTGRESQL DISABLED - COMMENTED OUT
+            // ============================================================
 
-            // SAVE MESSAGE TO POSTGRESQL
+            /*
+            // SAVE MESSAGE TO POSTGRESQL - DISABLED
+            const saveResult = await pool.query(...);
+            */
 
-            // ------------------------------------------------------
 
 
+            // ============================================================
+            // GOOGLE SHEETS - ALWAYS SAVE (INDEPENDENT)
+            // ============================================================
 
-            const saveResult =
-
-                await pool.query(
-
-                    `
-
-                    INSERT INTO messages (
-
-                        whatsapp_message_id,
-
-                        group_id,
-
-                        group_name,
-
-                        sender_id,
-
-                        sender_number,
-
-                        sender_name,
-
-                        message,
-
-                        message_type,
-
-                        timestamp,
-
-                        has_media,
-
-                        media_path,
-
-                        media_data,
-
-                        media_mimetype,
-
-                        media_filename,
-
-                        location_link
-
-                    )
-
-
-
-                    VALUES (
-
-                        $1, $2, $3, $4, $5,
-
-                        $6, $7, $8, $9, $10,
-
-                        $11, $12, $13, $14, $15
-
-                    )
-
-
-
-                    ON CONFLICT (whatsapp_message_id)
-
-
-
-                    DO UPDATE SET
-
-
-
-                        group_id =
-
-                            COALESCE(
-
-                                EXCLUDED.group_id,
-
-                                messages.group_id
-
-                            ),
-
-
-
-                        group_name =
-
-                            COALESCE(
-
-                                EXCLUDED.group_name,
-
-                                messages.group_name
-
-                            ),
-
-
-
-                        sender_id =
-
-                            COALESCE(
-
-                                EXCLUDED.sender_id,
-
-                                messages.sender_id
-
-                            ),
-
-
-
-                        sender_number =
-
-                            COALESCE(
-
-                                EXCLUDED.sender_number,
-
-                                messages.sender_number
-
-                            ),
-
-
-
-                        sender_name =
-
-                            COALESCE(
-
-                                EXCLUDED.sender_name,
-
-                                messages.sender_name
-
-                            ),
-
-
-
-                        message =
-
-                            COALESCE(
-
-                                EXCLUDED.message,
-
-                                messages.message
-
-                            ),
-
-
-
-                        message_type =
-
-                            COALESCE(
-
-                                EXCLUDED.message_type,
-
-                                messages.message_type
-
-                            ),
-
-
-
-                        timestamp =
-
-                            COALESCE(
-
-                                EXCLUDED.timestamp,
-
-                                messages.timestamp
-
-                            ),
-
-
-
-                        has_media =
-
-                            messages.has_media OR EXCLUDED.has_media,
-
-
-
-                        media_path =
-
-                            COALESCE(
-
-                                EXCLUDED.media_path,
-
-                                messages.media_path
-
-                            ),
-
-
-
-                        media_data =
-
-                            COALESCE(
-
-                                EXCLUDED.media_data,
-
-                                messages.media_data
-
-                            ),
-
-
-
-                        media_mimetype =
-
-                            COALESCE(
-
-                                EXCLUDED.media_mimetype,
-
-                                messages.media_mimetype
-
-                            ),
-
-
-
-                        media_filename =
-
-                            COALESCE(
-
-                                EXCLUDED.media_filename,
-
-                                messages.media_filename
-
-                            ),
-
-
-
-                        location_link =
-
-                            COALESCE(
-
-                                EXCLUDED.location_link,
-
-                                messages.location_link
-
-                            )
-
-
-
-                    RETURNING
-
-                        id,
-
-                        media_path,
-
-                        has_media,
-
-                        media_filename
-
-                    `,
-
-                    [
-
-                        messageId,
-
-                        groupId,
-
-                        groupName,
-
-                        senderId,
-
-                        senderNumber,
-
-                        senderName ||
-
-                            senderNumber ||
-
-                            senderId ||
-
-                            'Unknown Sender',
-
-                        originalMessage,
-
-                        msg.type,
-
-                        messageDate,
-
-                        hasMedia,
-
-                        mediaPath,
-
-                        mediaData,
-
-                        mediaMimetype,
-
-                        mediaFilename,
-
-                        locationLink
-
-                    ]
-
-                );
-
-
-
-            // ======================================================
-
-            // GOOGLE SHEETS
-
-            // ======================================================
-
-
-
-            if (saveResult.rows[0]) {
-
-
+            try {
 
                 const messageData = {
 
-
-
-                    id:
-
-                        saveResult.rows[0].id,
-
-
-
-                    whatsapp_message_id:
-
-                        messageId,
-
-
-
-                    // IMPORTANT: Google Sheet column C
-
-                    group_id:
-
-                        groupId,
-
-
-
-                    group_name:
-
-                        groupName,
-
-
-
-                    sender_id:
-
-                        senderId,
-
-
-
-                    sender_number:
-
-                        senderNumber,
-
-
-
-                    sender_name:
-
-                        senderName,
-
-
-
-                    message:
-
-                        originalMessage,
-
-
-
-                    message_type:
-
-                        msg.type,
-
-
-
-                        timestamp:
-                        "'" + String(messageDate),
-
-
-
-                    has_media:
-
-                        hasMedia,
-
-
-
-                    media_path:
-
-                        mediaPath,
-
-
-
-                    location_link:
-
-                        locationLink
+                    id: messageId,
+                    whatsapp_message_id: messageId,
+                    group_id: groupWhatsappId,
+                    group_name: groupName || 'Unknown Group',
+                    sender_id: senderId || 'Unknown',
+                    sender_number: senderNumber || 'N/A',
+                    sender_name: senderName || senderNumber || senderId || 'Unknown Sender',
+                    message: originalMessage || '(media)',
+                    message_type: msg.type,
+                    timestamp: "'" + String(messageDate),
+                    has_media: hasMedia,
+                    media_path: mediaPath || '',
+                    location_link: locationLink || ''
 
                 };
 
 
 
-                // Google Sheets
-
-                googleSheets
-
-                    .appendMessage(messageData)
-
-                    .catch(error => {
+                console.log('📊 Attempting Google Sheets save...');
+                await googleSheets.appendMessage(messageData);
+                console.log('✅ Message saved to Google Sheets');
+                console.log('📊 Google Sheets data:', JSON.stringify(messageData, null, 2));
 
 
 
-                        console.error(
+            } catch (sheetError) {
 
-                            '❌ Google Sheet sync failed:',
-
-                            error.message
-
-                        );
-
-                    });
+                console.error('❌ Google Sheet sync failed:', sheetError.message);
+                console.error('Sheet error stack:', sheetError.stack);
 
             }
 
 
 
             console.log(
-
-                'Message saved/updated in PostgreSQL'
-
+                '========== MESSAGE PROCESSING COMPLETE =========='
             );
-
-
-
             console.log(
-
-                '[DATABASE] ID:',
-
-                saveResult.rows[0]?.id
-
-            );
-
-
-
-            console.log(
-
-                '[DATABASE] has_media:',
-
-                saveResult.rows[0]?.has_media
-
-            );
-
-
-
-            console.log(
-
-                '[DATABASE] media_path:',
-
-                saveResult.rows[0]?.media_path
-
-            );
-
-
-
-            console.log(
-
-                '[DATABASE] media_filename:',
-
-                saveResult.rows[0]?.media_filename
-
-            );
-
-
-
-            console.log(
-
-                '========== MESSAGE SAVED =========='
-
-            );
-
-
-
-            console.log(
-
                 'Group:',
-
                 groupName || 'Unknown Group'
-
             );
-
-
-
             console.log(
-
                 'Sender:',
-
                 senderName ||
-
                     senderNumber ||
-
                     senderId ||
-
                     'Unknown Sender'
-
             );
-
-
-
             console.log(
-
                 'Number:',
-
                 senderNumber ||
-
                     'Not available'
-
             );
-
-
-
             console.log(
-
                 'Message:',
-
                 originalMessage ||
-
                     '(media/no text)'
-
             );
-
-
-
             console.log(
-
                 'Media:',
-
                 hasMedia
-
             );
-
-
-
             console.log(
-
                 'Media path:',
-
                 mediaPath ||
-
                     'None'
-
             );
-
-
-
             console.log(
-
                 '=================================='
-
             );
 
 
@@ -5187,59 +3629,26 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             console.error('');
-
-
-
             console.error(
-
                 '================================'
-
             );
-
-
-
             console.error(
-
                 'MESSAGE PROCESSING FAILED'
-
             );
-
-
-
             console.error(
-
                 'Name:',
-
                 error?.name || 'Unknown'
-
             );
-
-
-
             console.error(
-
                 'Message:',
-
                 error?.message || error
-
             );
-
-
-
             console.error(
-
                 'Stack:',
-
                 error?.stack || 'No stack'
-
             );
-
-
-
             console.error(
-
                 '================================'
-
             );
 
         }
@@ -5249,9 +3658,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
     // ============================================================
-
     // CLIENT EVENT ATTACHMENT (WITH DASHBOARD FIX)
-
     // ============================================================
 
 
@@ -5302,11 +3709,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
         // ============================================================
 
-
-
-        // ============================================================
-        // QR EVENT (CLEANED)
-        // ============================================================
         clientInstance.on('qr', async (qr) => {
             console.log('');
             console.log('============================================================');
@@ -5315,9 +3717,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
             
             try {
                 const qrImage = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
-                currentQR = qrImage;      // ✅ global nahi
-                isConnected = false;      // ✅ global nahi
-                qrError = null;          // ✅ global nahi
+                currentQR = qrImage;
+                isConnected = false;
+                qrError = null;
                 console.log('✅ QR code ready for dashboard');
             } catch (err) {
                 qrError = 'Failed to generate QR code';
@@ -5326,15 +3728,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
         
         clientInstance.on('authenticated', () => {
             console.log('✅ WhatsApp authenticated');
-            currentQR = null;     // ✅ global nahi
-            isConnected = true;   // ✅ global nahi
-            qrError = null;       // ✅ global nahi
-        });
-        clientInstance.on('authenticated', () => {
-            console.log('✅ WhatsApp authenticated successfully');
-            global.currentQR = null;
-            global.isConnected = true;
-            global.qrError = null;
+            currentQR = null;
+            isConnected = true;
+            qrError = null;
         });
 
 
@@ -5348,19 +3744,14 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
         clientInstance.on(
-
             'auth_failure',
-
             (message) => {
 
 
 
                 console.error(
-
                     'Authentication failed:',
-
                     message
-
                 );
 
             }
@@ -5378,9 +3769,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
         clientInstance.on(
-
             'ready',
-
             async () => {
 
 
@@ -5390,37 +3779,17 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log('');
-
-
-
                     console.log(
-
                         '============================================================'
-
                     );
-
-
-
                     console.log(
-
                         '✅ WHATSAPP READY'
-
                     );
-
-
-
                     console.log(
-
                         '============================================================'
-
                     );
-
-
-
                     console.log(
-
                         `Time: ${new Date().toISOString()}`
-
                     );
 
 
@@ -5430,7 +3799,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         const info =
-
                             clientInstance.info;
 
 
@@ -5440,65 +3808,41 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                             console.log(
-
                                 '[READY DEBUG] Client info available'
-
                             );
 
 
 
                             const phone =
-
                                 info.wid?._serialized ||
-
                                 info.wid?.$1 ||
-
                                 'Unknown';
 
 
 
                             const pushName =
-
                                 info.pushname ||
-
                                 'Unknown';
 
 
 
                             const platform =
-
                                 info.platform ||
-
                                 'Unknown';
 
 
 
                             console.log(
-
                                 '📱 Phone:',
-
                                 phone
-
                             );
-
-
-
                             console.log(
-
                                 '👤 Push name:',
-
                                 pushName
-
                             );
-
-
-
                             console.log(
-
                                 '💻 Platform:',
-
                                 platform
-
                             );
 
                         }
@@ -5510,11 +3854,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         console.log(
-
                             '[READY DEBUG] Client info unavailable:',
-
                             infoError.message
-
                         );
 
                     }
@@ -5528,27 +3869,20 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         if (
-
                             typeof clientInstance.getWWebVersion ===
-
                             'function'
-
                         ) {
 
 
 
                             const version =
-
                                 await clientInstance.getWWebVersion();
 
 
 
                             console.log(
-
                                 '[READY DEBUG] WhatsApp Web version:',
-
                                 version
-
                             );
 
                         }
@@ -5560,20 +3894,16 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         console.log(
-
                             '[READY DEBUG] WhatsApp Web version unavailable:',
-
                             versionError.message
-
                         );
 
                     }
 
 
 
-                    // Database
-
-                    await prepareDatabase();
+                    // PostgreSQL DISABLED
+                    // await prepareDatabase();
 
 
 
@@ -5584,13 +3914,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         await googleSheets.initializeSheet();
-
-
-
                         console.log(
-
                             '✅ Google Sheet headers initialized'
-
                         );
 
 
@@ -5600,11 +3925,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         console.log(
-
                             '⚠️ Google Sheet init warning:',
-
                             sheetError.message
-
                         );
 
                     }
@@ -5612,9 +3934,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log(
-
                         '============================================================'
-
                     );
 
 
@@ -5624,11 +3944,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.error(
-
                         'READY handler failed:',
-
                         error
-
                     );
 
                 }
@@ -5648,11 +3965,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
         clientInstance.on(
-
             'message',
-
             handleMessage
-
         );
 
 
@@ -5666,19 +3980,14 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
         clientInstance.on(
-
             'error',
-
             (error) => {
 
 
 
                 console.error(
-
                     'WhatsApp client error:',
-
                     error
-
                 );
 
             }
@@ -5696,47 +4005,24 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
         clientInstance.on(
-
             'disconnected',
-
             async (reason) => {
 
 
 
                 console.log('');
-
-
-
                 console.log(
-
                     '============================================================'
-
                 );
-
-
-
                 console.log(
-
                     '⚠️ WHATSAPP DISCONNECTED'
-
                 );
-
-
-
                 console.log(
-
                     'Reason:',
-
                     reason
-
                 );
-
-
-
                 console.log(
-
                     '============================================================'
-
                 );
 
 
@@ -5762,9 +4048,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         console.log(
-
                             '[LOGOUT] Restart already in progress. Skipping duplicate logout event...'
-
                         );
 
 
@@ -5780,25 +4064,13 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log('');
-
                     console.log(
-
                         '============================================================'
-
                     );
-
-
-
                     console.log(
-
                         '🔄 WHATSAPP LOGOUT DETECTED'
-
                     );
-
-
-
                     console.log(
-
                         '============================================================');
 
 
@@ -5814,9 +4086,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         // ------------------------------------------------
 
                         console.log(
-
                             '[LOGOUT] Removing event listeners from old client...'
-
                         );
 
 
@@ -5824,7 +4094,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         if (typeof clientInstance.removeAllListeners === 'function') {
 
                             clientInstance.removeAllListeners();
-
                             console.log('✅ Old client event listeners removed');
 
                         }
@@ -5838,9 +4107,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         // ------------------------------------------------
 
                         console.log(
-
                             '[LOGOUT] Destroying old WhatsApp client...'
-
                         );
 
 
@@ -5856,7 +4123,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                                 try {
 
                                     await clientInstance.pupBrowser.close();
-
                                     console.log('✅ Browser closed directly');
 
                                 } catch (e) {
@@ -5874,9 +4140,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                             console.log(
-
                                 '✅ Old WhatsApp client destroyed'
-
                             );
 
 
@@ -5886,11 +4150,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                             console.log(
-
                                 '[LOGOUT] Client destroy warning:',
-
                                 destroyError.message
-
                             );
 
                         }
@@ -5904,9 +4165,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         // ------------------------------------------------
 
                         console.log(
-
                             '[LOGOUT] Clearing logged-out LocalAuth session...'
-
                         );
 
 
@@ -5922,17 +4181,13 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         // ------------------------------------------------
 
                         console.log(
-
                             '[LOGOUT] Waiting before starting new login session...'
-
                         );
 
 
 
                         await new Promise(resolve =>
-
                             setTimeout(resolve, 3000)
-
                         );
 
 
@@ -5944,15 +4199,12 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         // ------------------------------------------------
 
                         console.log(
-
                             '[LOGOUT] Creating new WhatsApp client...'
-
                         );
 
 
 
                         const newClient =
-
                             createWhatsAppClient();
 
 
@@ -5972,17 +4224,13 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         // ------------------------------------------------
 
                         console.log(
-
                             '[LOGOUT] Attaching events to new client...'
-
                         );
 
 
 
                         attachClientEvents(
-
                             newClient
-
                         );
 
 
@@ -5994,9 +4242,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
                         // ------------------------------------------------
 
                         console.log(
-
                             '[LOGOUT] Initializing new WhatsApp client...'
-
                         );
 
 
@@ -6006,33 +4252,16 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         console.log('');
-
                         console.log(
-
                             '============================================================'
-
                         );
-
-
-
                         console.log(
-
                             '✅ NEW WHATSAPP CLIENT STARTED AFTER LOGOUT'
-
                         );
-
-
-
                         console.log(
-
                             '📱 Scan the NEW QR code to login'
-
                         );
-
-
-
                         console.log(
-
                             '============================================================');
 
 
@@ -6042,49 +4271,22 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         console.error('');
-
-
-
                         console.error(
-
                             '============================================================'
-
                         );
-
-
-
                         console.error(
-
                             '❌ WHATSAPP LOGOUT RESTART FAILED'
-
                         );
-
-
-
                         console.error(
-
                             'Message:',
-
                             error?.message
-
                         );
-
-
-
                         console.error(
-
                             'Stack:',
-
                             error?.stack
-
                         );
-
-
-
                         console.error(
-
                             '============================================================'
-
                         );
 
 
@@ -6104,7 +4306,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
         );
 
         // ============================================================
+
         // DASHBOARD SERVER START
+
         // ============================================================
         
         const DASHBOARD_PORT = 3000;
@@ -6120,17 +4324,13 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
     // ============================================================
-
     // MEDIA SERVER
-
     // ============================================================
 
 
 
     const mediaServer =
-
         http.createServer(
-
             async (req, res) => {
 
 
@@ -6140,35 +4340,24 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     if (
-
                         req.method !== 'GET' &&
-
                         req.method !== 'HEAD'
-
                     ) {
 
 
 
                         res.writeHead(
-
                             405,
-
                             {
-
                                 'Content-Type':
-
                                     'text/plain'
-
                             }
-
                         );
 
 
 
                         res.end(
-
                             'Method Not Allowed'
-
                         );
 
 
@@ -6180,23 +4369,16 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     const requestUrl =
-
                         new URL(
-
                             req.url,
-
                             MEDIA_BASE_URL
-
                         );
 
 
 
                     const requestedPath =
-
                         decodeURIComponent(
-
                             requestUrl.pathname
-
                         );
 
 
@@ -6206,13 +4388,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     if (
-
                         requestedPath.startsWith(
-
                             '/images/'
-
                         )
-
                     ) {
 
 
@@ -6222,13 +4400,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     } else if (
-
                         requestedPath.startsWith(
-
                             '/pdfs/'
-
                         )
-
                     ) {
 
 
@@ -6238,13 +4412,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     } else if (
-
                         requestedPath.startsWith(
-
                             '/videos/'
-
                         )
-
                     ) {
 
 
@@ -6258,25 +4428,17 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         res.writeHead(
-
                             404,
-
                             {
-
                                 'Content-Type':
-
                                     'text/plain'
-
                             }
-
                         );
 
 
 
                         res.end(
-
                             'File Not Found'
-
                         );
 
 
@@ -6288,11 +4450,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     const filename =
-
                         path.basename(
-
                             requestedPath
-
                         );
 
 
@@ -6302,25 +4461,17 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         res.writeHead(
-
                             400,
-
                             {
-
                                 'Content-Type':
-
                                     'text/plain'
-
                             }
-
                         );
 
 
 
                         res.end(
-
                             'Invalid filename'
-
                         );
 
 
@@ -6331,68 +4482,45 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
 
+                    // POSTGRESQL DISABLED - Media server also disabled
+                    /*
                     const result =
-
                         await pool.query(
-
                             `
-
                             SELECT
-
                                 media_data,
-
                                 media_mimetype,
-
                                 media_filename
-
                             FROM messages
-
                             WHERE media_filename = $1
-
                             AND media_data IS NOT NULL
-
                             LIMIT 1
-
                             `,
-
                             [
-
                                 filename
-
                             ]
-
                         );
 
 
 
                     if (
-
                         result.rows.length === 0
-
                     ) {
 
 
 
                         res.writeHead(
-
                             404,
-
                             {
-
                                 'Content-Type':
-
                                     'text/plain'
-
                             }
-
                         );
 
 
 
                         res.end(
-
                             'Media Not Found'
-
                         );
 
 
@@ -6404,79 +4532,60 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     const row =
-
                         result.rows[0];
 
 
 
                     const mediaBuffer =
-
                         row.media_data;
 
 
 
                     const contentType =
-
                         row.media_mimetype ||
-
                         (
-
                             mediaType === 'image'
-
                                 ? 'image/jpeg'
-
                                 : mediaType === 'video'
-
                                     ? 'video/mp4'
-
                                     : 'application/pdf'
-
                         );
 
 
 
                     res.writeHead(
-
                         200,
-
                         {
 
 
 
                             'Content-Type':
-
                                 contentType,
 
 
 
                             'Content-Length':
-
                                 mediaBuffer.length,
 
 
 
                             'Content-Disposition':
-
                                 'inline',
 
 
 
                             'Cache-Control':
-
                                 'public, max-age=31536000'
 
 
 
                         }
-
                     );
 
 
 
                     if (
-
                         req.method === 'HEAD'
-
                     ) {
 
 
@@ -6492,9 +4601,20 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     res.end(
-
                         mediaBuffer
+                    );
+                    */
 
+                    // TEMPORARY: Media server disabled
+                    res.writeHead(
+                        503,
+                        {
+                            'Content-Type':
+                                'text/plain'
+                        }
+                    );
+                    res.end(
+                        'Media server temporarily disabled (PostgreSQL disabled)'
                     );
 
 
@@ -6504,11 +4624,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.error(
-
                         '[MEDIA SERVER] Error:',
-
                         error.message
-
                     );
 
 
@@ -6518,17 +4635,11 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                         res.writeHead(
-
                             500,
-
                             {
-
                                 'Content-Type':
-
                                     'text/plain'
-
                             }
-
                         );
 
                     }
@@ -6536,9 +4647,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     res.end(
-
                         'Internal Server Error'
-
                     );
 
                 }
@@ -6550,52 +4659,31 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
     // ============================================================
-
     // START MEDIA SERVER
-
     // ============================================================
 
 
 
     mediaServer.listen(
-
         MEDIA_PORT,
-
         '0.0.0.0',
-
         () => {
 
 
 
             console.log(
-
                 `Media server running on port ${MEDIA_PORT}`
-
             );
-
-
-
             console.log(
-
                 `Images URL: ${MEDIA_BASE_URL}/images/`
-
             );
-
-
-
             console.log(
-
                 `PDFs URL: ${MEDIA_BASE_URL}/pdfs/`
-
             );
-
-
-
             console.log(
-
                 `Videos URL: ${MEDIA_BASE_URL}/videos/`
-
             );
+            console.log('⚠️ PostgreSQL is disabled - Media serving is temporary disabled');
 
         }
 
@@ -6604,37 +4692,20 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
     // ============================================================
-
     // START WHATSAPP
-
     // ============================================================
 
 
 
     console.log('');
-
-
-
     console.log(
-
         '============================================================'
-
     );
-
-
-
     console.log(
-
         'Starting WhatsApp client...'
-
     );
-
-
-
     console.log(
-
         '============================================================'
-
     );
 
 
@@ -6650,187 +4721,95 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
     // Initialize
 
     console.log('');
-
-
-
     console.log(
-
         '============================================================'
-
     );
-
-
-
     console.log(
-
         '🚀 CALLING WHATSAPP CLIENT INITIALIZE()'
-
     );
-
-
-
     console.log(
-
         '============================================================'
-
     );
 
 
 
     const initializeStartedAt =
-
         Date.now();
 
 
 
     client.initialize()
-
         .then(() => {
 
 
 
             const seconds =
-
                 (
-
                     (Date.now() - initializeStartedAt) /
-
                     1000
-
                 ).toFixed(2);
 
 
 
             console.log('');
-
-
-
             console.log(
-
                 '============================================================'
-
             );
-
-
-
             console.log(
-
                 '✅ client.initialize() PROMISE RESOLVED'
-
             );
-
-
-
             console.log(
-
                 'Time taken:',
-
                 seconds,
-
                 'seconds'
-
             );
-
-
-
             console.log(
-
                 '============================================================'
-
             );
 
 
 
         })
-
         .catch(error => {
 
 
 
             const seconds =
-
                 (
-
                     (Date.now() - initializeStartedAt) /
-
                     1000
-
                 ).toFixed(2);
 
 
 
             console.error('');
-
-
-
             console.error(
-
                 '============================================================'
-
             );
-
-
-
             console.error(
-
                 '❌ client.initialize() FAILED'
-
             );
-
-
-
             console.error(
-
                 'Time before failure:',
-
                 seconds,
-
                 'seconds'
-
             );
-
-
-
             console.error(
-
                 'Name:',
-
                 error?.name
-
             );
-
-
-
             console.error(
-
                 'Message:',
-
                 error?.message
-
             );
-
-
-
             console.error(
-
                 'Stack:'
-
             );
-
-
-
             console.error(
-
                 error?.stack
-
             );
-
-
-
             console.error(
-
                 '============================================================'
-
             );
 
         });
@@ -6838,9 +4817,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
     // ============================================================
-
     // PERIODIC CLIENT DEBUG
-
     // ============================================================
 
 
@@ -6850,13 +4827,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
         console.log('');
-
-
-
         console.log(
-
             '---------------- CLIENT STATUS DEBUG ----------------'
-
         );
 
 
@@ -6866,41 +4838,20 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             console.log(
-
                 'Client exists:',
-
                 !!client
-
             );
-
-
-
             console.log(
-
                 'Client pupBrowser:',
-
                 !!client?.pupBrowser
-
             );
-
-
-
             console.log(
-
                 'Client pupPage:',
-
                 !!client?.pupPage
-
             );
-
-
-
             console.log(
-
                 'Client info:',
-
                 client?.info || null
-
             );
 
 
@@ -6914,11 +4865,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log(
-
                         'Browser connected:',
-
                         client.pupBrowser.isConnected()
-
                     );
 
 
@@ -6928,11 +4876,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log(
-
                         'Browser connected check failed:',
-
                         error.message
-
                     );
 
                 }
@@ -6944,29 +4889,21 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     const pages =
-
                         await client.pupBrowser.pages();
 
 
 
                     console.log(
-
                         'Browser pages:',
-
                         pages.length
-
                     );
 
 
 
                     for (
-
                         let i = 0;
-
                         i < pages.length;
-
                         i++
-
                     ) {
 
 
@@ -6976,11 +4913,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                             console.log(
-
                                 `Page ${i}:`,
-
                                 await pages[i].url()
-
                             );
 
 
@@ -6990,11 +4924,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                             console.log(
-
                                 `Page ${i}: URL error:`,
-
                                 error.message
-
                             );
 
                         }
@@ -7008,11 +4939,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log(
-
                         'Browser pages error:',
-
                         error.message
-
                     );
 
                 }
@@ -7030,21 +4958,12 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log(
-
                         'Main page closed:',
-
                         client.pupPage.isClosed()
-
                     );
-
-
-
                     console.log(
-
                         'Main page URL:',
-
                         await client.pupPage.url()
-
                     );
 
 
@@ -7054,11 +4973,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
                     console.log(
-
                         'Main page debug error:',
-
                         error.message
-
                     );
 
                 }
@@ -7072,13 +4988,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
             console.error(
-
                 '[PERIODIC DEBUG] Error:',
-
                 error.stack ||
-
                 error.message
-
             );
 
         }
@@ -7086,9 +4998,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 
         console.log(
-
             '------------------------------------------------------'
-
         );
 
 
@@ -7096,7 +5006,5 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
     }, 30000);
 
     module.exports = {
-
         client
-
     };

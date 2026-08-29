@@ -14,7 +14,7 @@ services:
       - key: GOOGLE_SHEET_ID
         value: 1RPAcRJdo65pBaRw-GGrHJylFeB5pWeLPF0kOqPpjrDo
       - key: MEDIA_BASE_URL
-        value: https://whatshapp.onrender.com
+        value: https://whatshapp-s291.onrender.com   # ← UPDATE KARO
       - key: NODE_ENV
         value: production
       - key: PUPPETEER_HEADLESS
