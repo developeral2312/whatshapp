@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: whatshapp
+    runtime: docker
+    repo: https://github.com/developeral2312/whatshapp
+    branch: main
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: GOOGLE_SHEETS_PRIVATE_KEY
+        value: "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCg0V5NPWnHN/+l\n25T6auZdJWarJiU0ZZSEXQO5LlpSXZMk7AyiM1y/ltgheX9+5H/pXLh2tPbwTr9k\nwwIOnMD9e+znnNcjkeSuU3Nl8qUewIFBzyl1sh4WX4czCzWc1rn4jKP3CoYltWOQ\ntsigBQ9d3Jlk3tUVT96hID/LG0BeUrF4VjGjd8jcKb4bBSaRe33R9Hj0f4UsR6s5\nSQqeTnXm/gGqrithMS6ABe1kf1/B/H/GuKI27Vet3Kw7qiKPtZoV7xW6cco/cjXW\nkrAXq27x0iJn4QWk2k0b5+7ZKE8d5YXH40ak4a73GC68lrLzxUETRxS+4TtoeGEn\nNrPO/uNrAgMBAAECggEAFMtYbcAMqZwV5uzbOSbRzbvfKC9BAqLwjs2g2co4F0wO\nkZN3g2ZaeP2OHy9LgJgW6ru4sG9wOhzR8RCpd0PmooA/3v0FRo4AAK3oDzJ5Dl5m\n+Er2D0gY+DH2/0R/n12WjiB6t8q5E4QpBoEpX6OihokBSVfqO/ISv/PgZn4KFzKr\n+7trvtyGl1X1GvkoVI4jTg2IEdDRpeBFN1w3MUKTgycUwhCMFzfPxJwwT4L/647j\nqsFCOgC0p6Olw8rnEKod/wa0222mSxogbu+KXhpoxQtJuu1UOUYXHMKuEj+3oScT\nw8B1uwgMBAD/Ty4un05C9toS3mNFEtjFchaf5dTpzQKBgQDOno73ObAvfHhjV0QO\naxRrZlfYA0R+O/7OmBhidijpeexY7DvhEMgVPcqrKNCfdyrTycZhBsbMFzhTgkPM\nQ1PIYOTUV7PjHa9KAYrXsHMJO58WXAAl6cyX8UfvyJegty0HyqLWlnhLqtrbxBqb\n2qYsChrfz1xrlYYNp8PuQC7AvQKBgQDHQJGd/DETrlTimoU+yVkvUzZqky6L8enR\n8Q5NVTN08PxfzxFJvf+RP35pZg/pb5CEsPd7P3BII/PkF6NdUKQjoYN6u/r4OQuV\nfyVcYk2K8PXIt9bE9PsTsP4spJKeSyDO0ysOE8P1nu65iAudxbOVbsQVTWz+KWu6\nqZAvonmbRwKBgQCOONgh1qSu2xenEa932T8x+j1nJECmP7fSDyFhzQG2TEVipCFH\nd5yx+lmh3TNVQNrK823I5bg7TZRo7xap6IIoQIHipAffwlQhNdSTSRK1/UMxSdyU\nPE2nHN8ubz3n0458eYADA4oEU7PYaDEErMmLMN10xzBPoZmnlp4oRieoZQKBgEX+\naqji5KKTRQJtYY1S0d+MDbuWhG1ox8iWM337Bh54YU+Ov/X1podxlIiV79UC+fOC\n7wz+lgThjFV98Edhgqd5n2RIELuN3oHfrlIrvi2mw9CEtA9wN5sNO9yW22J75cSB\n7cf+LYJlGFtYbSw5PQKrbHpHPphyGIPz+NCi9LEVAoGBALk2fupzR1mZPh+Pry5a\no1LhfDu6cdifrbJjvx1nLDgaFbr8nHPTzl+/TfYkDz8QDDkYripCbrIO17LB/0l3\nKp+W81VX9jfPcFSGU2tthREHZdV1zOh1YR5f30SGWDqEk8y8rr3gfw37AOe599vT\nzE87T9yKPLilkDCqMRy1Tsjs\n-----END PRIVATE KEY-----\n"
+      - key: GOOGLE_SHEETS_CLIENT_EMAIL
+        value: sheet-423@double-gamma-504507-g4.iam.gserviceaccount.com
+      - key: GOOGLE_SHEET_ID
+        value: 1RPAcRJdo65pBaRw-GGrHJylFeB5pWeLPF0kOqPpjrDo
+      - key: MEDIA_BASE_URL
+        value: https://whatshapp.onrender.com
+      - key: NODE_ENV
+        value: production
+      - key: PUPPETEER_HEADLESS
+        value: "true"
